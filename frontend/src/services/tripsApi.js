@@ -1,7 +1,8 @@
 import axios from 'axios'
 
 const api = axios.create({
-  baseURL: 'http://localhost:5024/api'
+  // baseURL: 'http://localhost:5024/api'
+  baseURL: 'https://localhost:7024/api'
 })
 
 export async function getTrips() {
