@@ -1,9 +1,19 @@
-<script setup>
+<script setup lang="ts">
 import { reactive } from 'vue'
 
-const emit = defineEmits(['submit'])
+export interface CreateTripPayload {
+  name: string
+  country: string
+  startDate: string
+  endDate: string
+  budget: number
+}
 
-const form = reactive({
+const emit = defineEmits<{
+  (e: 'submit', payload: CreateTripPayload): void
+}>()
+
+const form = reactive<CreateTripPayload>({
   name: '',
   country: '',
   startDate: '',
@@ -29,7 +39,7 @@ function handleSubmit() {
       End date
       <input v-model="form.endDate" type="date" required />
     </label>
-    <input v-model="form.budget" type="number" min="0" placeholder="Budget" required />
+    <input v-model.number="form.budget" type="number" min="0" placeholder="Budget" required />
     <button type="submit">Save</button>
   </form>
 </template>

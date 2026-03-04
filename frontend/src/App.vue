@@ -1,9 +1,10 @@
-<script setup>
+<script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import TripForm from './components/TripForm.vue'
 import { createTrip, getTrips } from './services/tripsApi'
+import type { CreateTripPayload, Trip } from './services/tripsApi'
 
-const trips = ref([])
+const trips = ref<Trip[]>([])
 const error = ref('')
 
 async function loadTrips() {
@@ -15,7 +16,7 @@ async function loadTrips() {
   }
 }
 
-async function handleCreate(payload) {
+async function handleCreate(payload: CreateTripPayload) {
   try {
     await createTrip(payload)
     await loadTrips()
@@ -42,7 +43,7 @@ onMounted(loadTrips)
       <article v-for="trip in trips" :key="trip.id" class="trip-card">
         <h3>{{ trip.name }}</h3>
         <p>{{ trip.country }}</p>
-        <p>{{ trip.startDate }} → {{ trip.endDate }}</p>
+        <p>{{ trip.startDate }} -> {{ trip.endDate }}</p>
         <p>Budget: ${{ Number(trip.budget).toFixed(2) }}</p>
       </article>
     </section>
