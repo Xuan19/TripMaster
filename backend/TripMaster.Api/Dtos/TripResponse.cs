@@ -1,26 +1,14 @@
-using System.ComponentModel.DataAnnotations;
 using System.Text.Json;
 
 namespace TripMaster.Api.Dtos;
 
-public class CreateTripRequest
+public class TripResponse
 {
-    [Required]
-    [MaxLength(100)]
+    public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
-
-    [Required]
-    [MaxLength(100)]
     public string Country { get; set; } = string.Empty;
-
-    [Required]
     public DateOnly StartDate { get; set; }
-
-    [Required]
     public DateOnly EndDate { get; set; }
-
-    [Range(0, 9999999)]
     public decimal Budget { get; set; }
-
     public JsonElement? Details { get; set; }
 }

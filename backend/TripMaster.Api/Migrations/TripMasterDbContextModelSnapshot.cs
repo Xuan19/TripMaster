@@ -38,6 +38,9 @@ namespace TripMaster.Api.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("DetailsJson")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<DateOnly>("EndDate")
                         .HasColumnType("date");
 

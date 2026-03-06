@@ -1,4 +1,5 @@
 import axios from 'axios'
+import type { TripPlanDetails } from '../../components/trip/types'
 
 export interface Trip {
   id: number
@@ -7,9 +8,17 @@ export interface Trip {
   startDate: string
   endDate: string
   budget: number
+  details?: TripPlanDetails
 }
 
-export type CreateTripPayload = Omit<Trip, 'id'>
+export interface CreateTripPayload {
+  name: string
+  country: string
+  startDate: string
+  endDate: string
+  budget: number
+  details: TripPlanDetails
+}
 
 const api = axios.create({
   // baseURL: 'http://localhost:5024/api'
@@ -18,6 +27,11 @@ const api = axios.create({
 
 export async function getTrips(): Promise<Trip[]> {
   const { data } = await api.get<Trip[]>('/trips')
+  return data
+}
+
+export async function getTripById(id: number): Promise<Trip> {
+  const { data } = await api.get<Trip>(`/trips/${id}`)
   return data
 }
 

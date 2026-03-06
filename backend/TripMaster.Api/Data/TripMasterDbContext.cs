@@ -18,6 +18,10 @@ public class TripMasterDbContext : DbContext
             .Property(t => t.Budget)
             .HasPrecision(18, 2);
 
+        modelBuilder.Entity<Trip>()
+            .Property(t => t.DetailsJson)
+            .HasColumnType("nvarchar(max)");
+
         base.OnModelCreating(modelBuilder);
     }
 }

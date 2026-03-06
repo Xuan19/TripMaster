@@ -8,15 +8,18 @@ import InputText from 'primevue/inputtext'
 import MultiSelect from 'primevue/multiselect'
 import ProgressSpinner from 'primevue/progressspinner'
 import type { Currency, TripFormTexts } from '../../locales/i18n'
+import type { ActivityType, TripFormSubmitPayload } from './types'
 import { getAllCountries, getCitiesByCountry, getDistanceBetweenCities } from '../../services/api/geodataApi'
 
-export interface CreateTripPayload {
+interface DayActivity {
+  startTime: string
+  endTime: string
+  type: ActivityType
   name: string
-  country: string
-  startDate: string
-  endDate: string
-  budget: number
+  cost: number | null
 }
+
+const DEFAULT_ACTIVITY_START_TIME = '08:00'
 
 const props = defineProps<{
   texts: TripFormTexts
@@ -24,7 +27,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  (e: 'submit', payload: CreateTripPayload): void
+  (e: 'submit', payload: TripFormSubmitPayload): void
 }>()
 
 const fallbackCountryOptions = [
@@ -62,15 +65,17 @@ const segmentLoading = reactive<Record<string, boolean>>({})
 const segmentSignatures = reactive<Record<string, string>>({})
 const draggingCity = ref<{ dayIndex: number; cityIndex: number } | null>(null)
 const cityLoaderVisible = ref(false)
+const expandedDays = ref<Record<number, boolean>>({})
 let distanceDebounceTimer: ReturnType<typeof setTimeout> | null = null
 let cityLoaderTimer: ReturnType<typeof setTimeout> | null = null
 
 const form = reactive({
   name: '',
-  countries: [] as string[],
+  countries: ['France'] as string[],
   startDate: new Date(),
   numberOfDays: null as number | null,
   cityStops: [] as string[][],
+  dayActivities: [] as DayActivity[][],
   budget: null as number | null
 })
 
@@ -111,6 +116,14 @@ const itineraryDays = computed(() => {
   })
 })
 
+const activityTypeOptions = computed(() => [
+  { value: 'visit', label: props.texts.activityVisit },
+  { value: 'meal', label: props.texts.activityMeal },
+  { value: 'transport', label: props.texts.activityTransport },
+  { value: 'shopping', label: props.texts.activityShopping },
+  { value: 'other', label: props.texts.activityOther }
+])
+
 watch(
   () => form.numberOfDays,
   (days) => {
@@ -119,7 +132,20 @@ watch(
       const existing = form.cityStops[index]
       return existing && existing.length ? existing.slice(0, 4) : ['']
     })
+    form.dayActivities = Array.from({ length: count }, (_, index) => form.dayActivities[index] ?? [])
   }
+)
+
+watch(
+  () => itineraryDays.value.map((item) => item.index),
+  (dayIndexes) => {
+    const nextState: Record<number, boolean> = {}
+    dayIndexes.forEach((dayIndex) => {
+      nextState[dayIndex] = expandedDays.value[dayIndex] ?? false
+    })
+    expandedDays.value = nextState
+  },
+  { immediate: true }
 )
 
 watch(selectedCityOptions, () => {
@@ -175,7 +201,8 @@ watch(
         cityLoaderVisible.value = !allCitiesLoaded.value
       }, 450)
     }
-  }
+  },
+  { immediate: true }
 )
 
 watch(
@@ -194,7 +221,6 @@ watch(
 
 const canSubmit = computed(
   () =>
-    form.name.trim().length > 0 &&
     form.countries.length > 0 &&
     form.startDate !== null &&
     form.numberOfDays !== null &&
@@ -203,16 +229,36 @@ const canSubmit = computed(
     selectedCityOptions.value.length > 0 &&
     form.cityStops.length === Math.floor(form.numberOfDays) &&
     form.cityStops.every(
-      (dayStops) =>
-        dayStops.length > 0 &&
-        dayStops.every((city) => city.trim().length > 0 && selectedCitySet.value.has(city))
+      (dayStops) => {
+        const selectedCities = dayStops.map((city) => city.trim()).filter((city) => city.length > 0)
+        return selectedCities.length > 0 && selectedCities.every((city) => selectedCitySet.value.has(city))
+      }
     ) &&
-    form.budget !== null &&
-    form.budget >= 0
+    form.dayActivities.every((activities, dayIndex) =>
+      activities.every(
+        (activity, activityIndex) =>
+          isValidTimeRange(dayIndex, activityIndex, activity) &&
+          activity.name.trim().length > 0 &&
+          activity.cost !== null &&
+          activity.cost >= 0
+      )
+    ) &&
+    (form.budget === null || form.budget >= 0)
 )
 
 const showCountryError = computed(() => form.countries.length === 0)
 const showCityLoader = computed(() => cityLoaderVisible.value)
+const hasSelectedCountry = computed(() => form.countries.length > 0)
+const hasBudget = computed(() => form.budget !== null)
+const totalActivityCost = computed(() =>
+  form.dayActivities.reduce(
+    (daySum, activities) => daySum + activities.reduce((activitySum, activity) => activitySum + Number(activity.cost ?? 0), 0),
+    0
+  )
+)
+const remainingBudget = computed(() => Number(form.budget ?? 0) - totalActivityCost.value)
+const budgetSummaryValue = computed(() => (hasBudget.value ? formatMoney(Number(form.budget)) : '-'))
+const remainingBudgetSummaryValue = computed(() => (hasBudget.value ? formatMoney(remainingBudget.value) : '-'))
 
 function toIsoDate(value: Date) {
   const year = value.getFullYear()
@@ -229,6 +275,109 @@ function addCityStop(dayIndex: number) {
 function removeCityStop(dayIndex: number, cityIndex: number) {
   if (form.cityStops[dayIndex].length <= 1) return
   form.cityStops[dayIndex].splice(cityIndex, 1)
+}
+
+function addActivity(dayIndex: number) {
+  const activities = form.dayActivities[dayIndex]
+  const previous = activities[activities.length - 1]
+  const startTime = previous?.endTime || previous?.startTime || DEFAULT_ACTIVITY_START_TIME
+
+  activities.push({
+    startTime,
+    endTime: startTime,
+    type: 'visit',
+    name: '',
+    cost: null
+  })
+
+  expandedDays.value[dayIndex] = true
+}
+
+function removeActivity(dayIndex: number, activityIndex: number) {
+  form.dayActivities[dayIndex].splice(activityIndex, 1)
+  syncActivitiesFrom(dayIndex, activityIndex)
+}
+
+function getMinStartTime(dayIndex: number, activityIndex: number) {
+  if (activityIndex === 0) return DEFAULT_ACTIVITY_START_TIME
+  return form.dayActivities[dayIndex]?.[activityIndex - 1]?.endTime || ''
+}
+
+function syncActivitiesFrom(dayIndex: number, startIndex: number) {
+  const activities = form.dayActivities[dayIndex] ?? []
+  for (let index = Math.max(startIndex, 0); index < activities.length; index += 1) {
+    const activity = activities[index]
+    const minStart = getMinStartTime(dayIndex, index)
+
+    if (!activity.startTime || (minStart && activity.startTime < minStart)) {
+      activity.startTime = minStart || DEFAULT_ACTIVITY_START_TIME
+    }
+
+    if (!activity.endTime || activity.endTime < activity.startTime) {
+      activity.endTime = activity.startTime
+    }
+  }
+}
+
+function handleActivityStartChange(dayIndex: number, activityIndex: number, value: string) {
+  const activity = form.dayActivities[dayIndex]?.[activityIndex]
+  if (!activity) return
+
+  const minStart = getMinStartTime(dayIndex, activityIndex)
+  const nextStart = !value ? minStart || DEFAULT_ACTIVITY_START_TIME : minStart && value < minStart ? minStart : value
+
+  activity.startTime = nextStart
+  if (!activity.endTime || activity.endTime < activity.startTime) {
+    activity.endTime = activity.startTime
+  }
+
+  syncActivitiesFrom(dayIndex, activityIndex + 1)
+}
+
+function handleActivityEndChange(dayIndex: number, activityIndex: number, value: string) {
+  const activity = form.dayActivities[dayIndex]?.[activityIndex]
+  if (!activity) return
+
+  if (!activity.startTime) {
+    activity.startTime = getMinStartTime(dayIndex, activityIndex) || DEFAULT_ACTIVITY_START_TIME
+  }
+
+  if (!value) {
+    activity.endTime = activity.startTime
+    return
+  }
+
+  activity.endTime = value < activity.startTime ? activity.startTime : value
+  syncActivitiesFrom(dayIndex, activityIndex + 1)
+}
+
+function isValidTimeRange(dayIndex: number, activityIndex: number, activity: DayActivity) {
+  if (activity.startTime.length === 0 || activity.endTime.length === 0) return false
+  if (activity.endTime < activity.startTime) return false
+
+  const minStart = getMinStartTime(dayIndex, activityIndex)
+  return !minStart || activity.startTime >= minStart
+}
+
+function getActivityDurationLabel(activity: DayActivity) {
+  if (!activity.startTime || !activity.endTime) return '--'
+
+  const [startHour, startMinute] = activity.startTime.split(':').map(Number)
+  const [endHour, endMinute] = activity.endTime.split(':').map(Number)
+  if (Number.isNaN(startHour) || Number.isNaN(startMinute) || Number.isNaN(endHour) || Number.isNaN(endMinute)) {
+    return '--'
+  }
+
+  let startTotal = startHour * 60 + startMinute
+  let endTotal = endHour * 60 + endMinute
+  if (endTotal < startTotal) endTotal += 24 * 60
+  const diff = endTotal - startTotal
+
+  const hours = Math.floor(diff / 60)
+  const minutes = diff % 60
+  if (hours && minutes) return `${hours}h ${minutes}m`
+  if (hours) return `${hours}h`
+  return `${minutes}m`
 }
 
 function handleCityDragStart(event: DragEvent, dayIndex: number, cityIndex: number) {
@@ -326,18 +475,57 @@ function getCitySelectWidth(cityName: string) {
   return `${bounded}px`
 }
 
+function toggleDayActivities(dayIndex: number) {
+  expandedDays.value[dayIndex] = !expandedDays.value[dayIndex]
+}
+
+function isDayExpanded(dayIndex: number) {
+  return expandedDays.value[dayIndex] === true
+}
+
+function hasActivities(dayIndex: number) {
+  return (form.dayActivities[dayIndex]?.length ?? 0) > 0
+}
+
+function hasSelectedCity(dayIndex: number) {
+  return form.cityStops[dayIndex]?.some((city) => city.trim().length > 0) ?? false
+}
+
 function handleSubmit() {
   if (!canSubmit.value) return
 
   const endDate = itineraryDays.value[itineraryDays.value.length - 1].isoDate
+  const startDate = toIsoDate(form.startDate as Date)
 
   emit('submit', {
     name: form.name.trim(),
     country: form.countries.join(', '),
-    startDate: toIsoDate(form.startDate as Date),
+    startDate,
     endDate,
-    budget: Number(form.budget)
+    budget: Number(form.budget ?? 0),
+    details: {
+      countries: [...form.countries],
+      dayPlans: itineraryDays.value.map((item) => ({
+        day: item.day,
+        date: item.isoDate,
+        cities: form.cityStops[item.index].map((city) => city.trim()).filter((city) => city.length > 0),
+        activities: form.dayActivities[item.index].map((activity) => ({
+          startTime: activity.startTime,
+          endTime: activity.endTime,
+          type: activity.type,
+          details: activity.name.trim(),
+          cost: Number(activity.cost ?? 0)
+        }))
+      }))
+    }
   })
+}
+
+function formatMoney(value: number) {
+  return new Intl.NumberFormat(undefined, {
+    style: 'currency',
+    currency: props.currencyCode
+  }).format(value)
 }
 
 onMounted(async () => {
@@ -351,48 +539,75 @@ onMounted(async () => {
 </script>
 
 <template>
-  <form class="trip-form" @submit.prevent="handleSubmit">
-    <h2>{{ props.texts.createTrip }}</h2>
+  <div class="trip-form-layout">
+    <form class="trip-form" @submit.prevent="handleSubmit">
+      <h2>{{ props.texts.createTrip }}</h2>
 
-    <div class="field-group">
-      <label>{{ props.texts.tripName }}</label>
-      <InputText v-model="form.name" :placeholder="props.texts.tripName" />
-    </div>
-
-    <div class="field-group">
-      <label>{{ props.texts.country }}</label>
-      <MultiSelect
-        v-model="form.countries"
-        :options="countryOptions"
-        :placeholder="props.texts.country"
-        :show-toggle-all="false"
-        :filter="true"
-        display="chip"
-        :class="{ 'p-invalid': showCountryError }"
-      />
-      <small v-if="showCountryError" class="field-error">Please select at least one country.</small>
-      <div v-if="showCityLoader" class="city-loader">
-        <ProgressSpinner style="width: 18px; height: 18px" stroke-width="6" />
-        <small>{{ props.texts.loadingCities }}</small>
-      </div>
-    </div>
-
-    <div class="date-days-row">
-      <div class="field-group compact-field">
-        <label>{{ props.texts.startDate }}</label>
-        <Calendar v-model="form.startDate" date-format="yy-mm-dd" show-icon />
+      <div class="field-group">
+        <label>{{ props.texts.tripName }}</label>
+        <InputText v-model="form.name" :placeholder="props.texts.tripName" />
       </div>
 
-      <div class="field-group compact-field">
-        <label>{{ props.texts.numberOfDays }}</label>
-        <InputNumber v-model="form.numberOfDays" mode="decimal" :min="1" :max-fraction-digits="0" />
+      <div class="field-group">
+        <label>{{ props.texts.country }}</label>
+        <MultiSelect
+          v-model="form.countries"
+          :options="countryOptions"
+          :placeholder="props.texts.country"
+          :show-toggle-all="false"
+          :filter="true"
+          display="chip"
+          :class="{ 'p-invalid': showCountryError }"
+        />
+        <small v-if="showCountryError" class="field-error">Please select at least one country.</small>
+        <div v-if="showCityLoader" class="city-loader">
+          <ProgressSpinner style="width: 18px; height: 18px" stroke-width="6" />
+          <small>{{ props.texts.loadingCities }}</small>
+        </div>
       </div>
-    </div>
 
-    <section v-if="itineraryDays.length" class="itinerary-section">
+      <div class="date-days-row">
+        <div class="field-group compact-field">
+          <label>{{ props.texts.startDate }}</label>
+          <Calendar v-model="form.startDate" date-format="yy-mm-dd" show-icon :disabled="!hasSelectedCountry" />
+        </div>
+
+        <div class="field-group compact-field">
+          <label>{{ props.texts.numberOfDays }}</label>
+          <InputNumber
+            v-model="form.numberOfDays"
+            mode="decimal"
+            :min="1"
+            :max-fraction-digits="0"
+            :disabled="!hasSelectedCountry"
+          />
+        </div>
+
+        <div class="field-group compact-field">
+          <label>{{ props.texts.budget }}</label>
+          <InputNumber
+            v-model="form.budget"
+            mode="currency"
+            :currency="props.currencyCode"
+            :min="0"
+            :placeholder="`${props.texts.budget} (${props.currencyCode})`"
+          />
+        </div>
+      </div>
+
+      <section v-if="itineraryDays.length" class="itinerary-section">
       <h3>{{ props.texts.dailyProgram }}</h3>
       <div v-for="item in itineraryDays" :key="item.index" class="itinerary-row">
-        <span class="itinerary-label">{{ props.texts.day }} {{ item.day }}, {{ item.displayDate }}</span>
+        <button
+          v-if="hasActivities(item.index)"
+          type="button"
+          class="itinerary-day-toggle"
+          @click="toggleDayActivities(item.index)"
+        >
+          <span class="itinerary-label">{{ props.texts.day }} {{ item.day }}, {{ item.displayDate }}</span>
+          <i class="pi" :class="isDayExpanded(item.index) ? 'pi-chevron-down' : 'pi-chevron-right'" />
+        </button>
+        <span v-else class="itinerary-label">{{ props.texts.day }} {{ item.day }}, {{ item.displayDate }}</span>
         <div class="city-stops-inline">
           <template v-for="(_, cityIndex) in form.cityStops[item.index]" :key="`${item.index}-${cityIndex}`">
             <div class="city-stop-inline" @dragover.prevent @drop.prevent="handleCityDrop(item.index, cityIndex)">
@@ -444,19 +659,84 @@ onMounted(async () => {
             @click="addCityStop(item.index)"
           />
         </div>
+        <div
+          v-if="(hasSelectedCity(item.index) || hasActivities(item.index)) && (!hasActivities(item.index) || isDayExpanded(item.index))"
+          class="activities-section"
+        >
+          <div
+            v-for="(activity, activityIndex) in form.dayActivities[item.index]"
+            :key="`${item.index}-activity-${activityIndex}`"
+            class="activity-row"
+          >
+            <div class="activity-time-field">
+              <small>{{ props.texts.activityStartTime }}</small>
+              <InputText
+                :model-value="activity.startTime"
+                type="time"
+                :min="getMinStartTime(item.index, activityIndex)"
+                :placeholder="props.texts.activityStartTime"
+                @update:model-value="handleActivityStartChange(item.index, activityIndex, String($event ?? ''))"
+              />
+            </div>
+            <div class="activity-time-field">
+              <small>{{ props.texts.activityEndTime }}</small>
+              <InputText
+                :model-value="activity.endTime"
+                type="time"
+                :min="activity.startTime || getMinStartTime(item.index, activityIndex)"
+                :placeholder="props.texts.activityEndTime"
+                @update:model-value="handleActivityEndChange(item.index, activityIndex, String($event ?? ''))"
+              />
+            </div>
+            <div class="activity-duration">
+              <small>{{ props.texts.activityDuration }}</small>
+              <span :class="{ invalid: !isValidTimeRange(item.index, activityIndex, activity) }">{{
+                getActivityDurationLabel(activity)
+              }}</span>
+            </div>
+            <Dropdown
+              v-model="activity.type"
+              :options="activityTypeOptions"
+              option-label="label"
+              option-value="value"
+              :placeholder="props.texts.activityType"
+            />
+            <InputText v-model="activity.name" :placeholder="props.texts.activityName" />
+            <InputNumber
+              v-model="activity.cost"
+              mode="currency"
+              :currency="props.currencyCode"
+              :min="0"
+              :placeholder="props.texts.activityCost"
+            />
+            <Button
+              type="button"
+              icon="pi pi-trash"
+              text
+              rounded
+              class="remove-activity-btn"
+              @click="removeActivity(item.index, activityIndex)"
+            />
+          </div>
+          <Button
+            v-if="hasSelectedCity(item.index)"
+            type="button"
+            outlined
+            class="add-activity-btn"
+            :label="props.texts.addActivity"
+            @click="addActivity(item.index)"
+          />
+        </div>
       </div>
-    </section>
+      </section>
 
-    <div class="field-group">
-      <label>{{ props.texts.budget }}</label>
-      <InputNumber
-        v-model="form.budget"
-        mode="decimal"
-        :min="0"
-        :placeholder="`${props.texts.budget} (${props.currencyCode})`"
-      />
-    </div>
+      <Button type="submit" :label="props.texts.save" :disabled="!canSubmit" />
+    </form>
 
-    <Button type="submit" :label="props.texts.save" :disabled="!canSubmit" />
-  </form>
+    <aside class="budget-side-card">
+      <p><strong>{{ props.texts.budget }}:</strong> {{ budgetSummaryValue }}</p>
+      <p><strong>{{ props.texts.totalCost }}:</strong> {{ formatMoney(totalActivityCost) }}</p>
+      <p><strong>{{ props.texts.remainingBudget }}:</strong> {{ remainingBudgetSummaryValue }}</p>
+    </aside>
+  </div>
 </template>

@@ -15,10 +15,30 @@ export interface UiTexts {
   day: string
   city: string
   loadingCities: string
+  addActivity: string
+  activityStartTime: string
+  activityEndTime: string
+  activityType: string
+  activityVisit: string
+  activityMeal: string
+  activityTransport: string
+  activityShopping: string
+  activityOther: string
+  activityName: string
+  activityAddress: string
+  activityCost: string
+  activityDuration: string
+  removeActivity: string
   budget: string
+  totalCost: string
+  remainingBudget: string
   save: string
   upcomingTrips: string
   noTrips: string
+  tripDetails: string
+  noTripDetails: string
+  savedCities: string
+  savedActivities: string
   budgetLabel: string
   connectError: string
   createError: string
@@ -35,7 +55,23 @@ export type TripFormTexts = Pick<
   | 'day'
   | 'city'
   | 'loadingCities'
+  | 'addActivity'
+  | 'activityStartTime'
+  | 'activityEndTime'
+  | 'activityType'
+  | 'activityVisit'
+  | 'activityMeal'
+  | 'activityTransport'
+  | 'activityShopping'
+  | 'activityOther'
+  | 'activityName'
+  | 'activityAddress'
+  | 'activityCost'
+  | 'activityDuration'
+  | 'removeActivity'
   | 'budget'
+  | 'totalCost'
+  | 'remainingBudget'
   | 'save'
 >
 
@@ -54,10 +90,30 @@ export const translations: Record<Language, UiTexts> = {
     day: 'Day',
     city: 'City',
     loadingCities: 'Loading cities...',
+    addActivity: 'Add activity',
+    activityStartTime: 'Start time',
+    activityEndTime: 'End time',
+    activityType: 'Type',
+    activityVisit: 'Visit',
+    activityMeal: 'Meal',
+    activityTransport: 'Transport',
+    activityShopping: 'Shopping',
+    activityOther: 'Other',
+    activityName: 'Details',
+    activityAddress: 'Address',
+    activityCost: 'Cost',
+    activityDuration: 'Duration',
+    removeActivity: 'Remove activity',
     budget: 'Budget',
+    totalCost: 'Total cost',
+    remainingBudget: 'Remaining budget',
     save: 'Save',
     upcomingTrips: 'Upcoming trips',
     noTrips: 'No trips yet.',
+    tripDetails: 'Trip details',
+    noTripDetails: 'No saved itinerary details for this trip.',
+    savedCities: 'Cities',
+    savedActivities: 'Activities',
     budgetLabel: 'Budget',
     connectError: 'Could not connect to API. Make sure backend is running.',
     createError: 'Trip creation failed. Check API validation rules.'
@@ -76,10 +132,30 @@ export const translations: Record<Language, UiTexts> = {
     day: 'Jour',
     city: 'Ville',
     loadingCities: 'Chargement des villes...',
+    addActivity: 'Ajouter une activite',
+    activityStartTime: 'Heure de debut',
+    activityEndTime: 'Heure de fin',
+    activityType: 'Type',
+    activityVisit: 'Visite',
+    activityMeal: 'Repas',
+    activityTransport: 'Transport',
+    activityShopping: 'Shopping',
+    activityOther: 'Autre',
+    activityName: 'Details',
+    activityAddress: 'Adresse',
+    activityCost: 'Cout',
+    activityDuration: 'Duree',
+    removeActivity: 'Supprimer activite',
     budget: 'Budget',
+    totalCost: 'Cout total',
+    remainingBudget: 'Budget restant',
     save: 'Enregistrer',
     upcomingTrips: 'Voyages a venir',
     noTrips: 'Aucun voyage pour le moment.',
+    tripDetails: 'Details du voyage',
+    noTripDetails: 'Aucun detail enregistre pour ce voyage.',
+    savedCities: 'Villes',
+    savedActivities: 'Activites',
     budgetLabel: 'Budget',
     connectError: "Impossible de se connecter a l'API. Verifiez que le backend est lance.",
     createError: 'Echec de creation du voyage. Verifiez les regles de validation API.'
@@ -98,10 +174,30 @@ export const translations: Record<Language, UiTexts> = {
     day: '第',
     city: '城市',
     loadingCities: '正在加载城市...',
+    addActivity: '添加活动',
+    activityStartTime: '开始时间',
+    activityEndTime: '结束时间',
+    activityType: '类型',
+    activityVisit: '参观',
+    activityMeal: '用餐',
+    activityTransport: '交通',
+    activityShopping: '购物',
+    activityOther: '其他',
+    activityName: '详情',
+    activityAddress: '地址',
+    activityCost: '费用',
+    activityDuration: '时长',
+    removeActivity: '删除活动',
     budget: '预算',
+    totalCost: '总花费',
+    remainingBudget: '剩余预算',
     save: '保存',
     upcomingTrips: '即将开始的旅行',
     noTrips: '暂无旅行。',
+    tripDetails: '旅行详情',
+    noTripDetails: '此旅行暂无已保存的行程详情。',
+    savedCities: '城市',
+    savedActivities: '活动',
     budgetLabel: '预算',
     connectError: '无法连接到 API。请确认后端正在运行。',
     createError: '创建旅行失败。请检查 API 校验规则。'

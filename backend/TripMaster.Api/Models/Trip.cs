@@ -8,4 +8,5 @@ public class Trip
     public DateOnly StartDate { get; set; }
     public DateOnly EndDate { get; set; }
     public decimal Budget { get; set; }
+    public string? DetailsJson { get; set; }
 }
