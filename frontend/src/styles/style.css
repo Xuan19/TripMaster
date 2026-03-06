@@ -20,6 +20,37 @@ body {
 
 .page-header {
   margin-bottom: 1rem;
+  display: grid;
+  gap: 0.4rem;
+}
+
+.header-settings {
+  display: flex;
+  gap: 0.6rem;
+  justify-content: flex-end;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.header-control {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.header-control label {
+  font-size: 0.74rem;
+  color: #64748b;
+  text-align: right;
+}
+
+.compact-select {
+  min-width: 130px;
+}
+
+.compact-select .p-dropdown-label {
+  font-size: 0.82rem;
+  padding-top: 0.35rem;
+  padding-bottom: 0.35rem;
 }
 
 .subtitle {
@@ -27,19 +58,8 @@ body {
   margin: 0.25rem 0 0;
 }
 
-.preferences-card,
 .creator-section {
   margin-bottom: 1rem;
-}
-
-.preferences-card .p-card-content {
-  padding: 1rem;
-}
-
-.preferences-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1rem;
 }
 
 .field-group {
@@ -50,6 +70,35 @@ body {
 .field-group label {
   font-size: 0.92rem;
   color: #334155;
+}
+
+.field-error {
+  color: #dc2626;
+  font-size: 0.78rem;
+}
+
+.city-loader {
+  margin-top: 0.2rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #475569;
+}
+
+.date-days-row {
+  display: flex;
+  gap: 0.6rem;
+  align-items: end;
+}
+
+.compact-field {
+  width: min(280px, 100%);
+}
+
+.compact-field .p-calendar .p-datepicker-trigger {
+  width: 1.9rem;
+  min-width: 1.9rem;
+  padding: 0.2rem;
 }
 
 .trip-form {
@@ -65,8 +114,133 @@ body {
 .trip-form .p-inputnumber,
 .trip-form .p-calendar,
 .trip-form .p-dropdown,
+.trip-form .p-multiselect,
 .trip-form .p-button {
   width: 100%;
+}
+
+.itinerary-section {
+  display: grid;
+  gap: 0.6rem;
+  padding: 0.75rem;
+  border: 1px solid #dbe5f1;
+  border-radius: 10px;
+  background: #f8fbff;
+}
+
+.itinerary-section h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.itinerary-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 170px) 1fr;
+  gap: 0.6rem;
+  align-items: start;
+}
+
+.itinerary-label {
+  font-size: 0.9rem;
+  color: #334155;
+  padding-top: 0.5rem;
+}
+
+.city-stops-inline {
+  display: flex;
+  gap: 0.3rem;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+.city-stop-inline {
+  flex: 0 1 auto;
+  min-width: 140px;
+  max-width: 420px;
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.city-select {
+  width: auto;
+  min-width: 140px;
+}
+
+.city-select .p-dropdown-label {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+.drag-city-btn.p-button {
+  border: none;
+  box-shadow: none;
+  width: auto;
+  color: #64748b;
+  cursor: grab;
+  min-height: auto;
+}
+
+.remove-city-btn.p-button {
+  border: none;
+  box-shadow: none;
+  width: auto;
+  color: #94a3b8;
+  opacity: 0.55;
+  min-height: auto;
+}
+
+.city-stop-inline:hover .remove-city-btn.p-button,
+.remove-city-btn.p-button:focus-visible {
+  opacity: 1;
+  color: #64748b;
+}
+
+.city-connector {
+  width: 88px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 0.08rem;
+  min-height: 2.5rem;
+  align-self: center;
+}
+
+.distance-label {
+  font-size: 0.7rem;
+  color: #334155;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.arrow-line {
+  position: relative;
+  display: block;
+  width: 72px;
+  height: 0;
+  border-top: 2px solid #64748b;
+}
+
+.arrow-line::after {
+  content: '';
+  position: absolute;
+  right: -1px;
+  top: -4px;
+  width: 0;
+  height: 0;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 7px solid #64748b;
+}
+
+.add-city-btn.p-button {
+  border: none;
+  box-shadow: none;
+  margin-left: 0.5rem;
+  align-self: center;
+  width: auto;
 }
 
 .trip-list {
@@ -103,10 +277,6 @@ body {
 }
 
 @media (max-width: 700px) {
-  .preferences-grid {
-    grid-template-columns: 1fr;
-  }
-
   .page h1 {
     font-size: 1.7rem;
     line-height: 1.2;
@@ -115,16 +285,37 @@ body {
   .trip-form {
     border-radius: 10px;
   }
+
+  .itinerary-row {
+    grid-template-columns: 1fr;
+  }
+
+  .header-settings {
+    justify-content: stretch;
+  }
+
+  .header-control {
+    flex: 1;
+  }
+
+  .header-control label {
+    text-align: left;
+  }
+
+  .compact-select {
+    width: 100%;
+  }
+
+  .date-days-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
 
 @media (max-width: 480px) {
   .page {
     padding-left: 0.75rem;
     padding-right: 0.75rem;
-  }
-
-  .preferences-card .p-card-content {
-    padding: 0.75rem;
   }
 
   .trip-form {
@@ -138,5 +329,14 @@ body {
 
   .trip-form .p-button {
     min-height: 2.75rem;
+  }
+
+  .city-stop-inline {
+    flex-basis: 100%;
+    max-width: none;
+  }
+
+  .city-stops-inline {
+    flex-wrap: wrap;
   }
 }

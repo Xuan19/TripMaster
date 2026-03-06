@@ -10,7 +10,11 @@ export interface UiTexts {
   tripName: string
   country: string
   startDate: string
-  endDate: string
+  numberOfDays: string
+  dailyProgram: string
+  day: string
+  city: string
+  loadingCities: string
   budget: string
   save: string
   upcomingTrips: string
@@ -22,7 +26,17 @@ export interface UiTexts {
 
 export type TripFormTexts = Pick<
   UiTexts,
-  'createTrip' | 'tripName' | 'country' | 'startDate' | 'endDate' | 'budget' | 'save'
+  | 'createTrip'
+  | 'tripName'
+  | 'country'
+  | 'startDate'
+  | 'numberOfDays'
+  | 'dailyProgram'
+  | 'day'
+  | 'city'
+  | 'loadingCities'
+  | 'budget'
+  | 'save'
 >
 
 export const translations: Record<Language, UiTexts> = {
@@ -35,7 +49,11 @@ export const translations: Record<Language, UiTexts> = {
     tripName: 'Trip name',
     country: 'Country',
     startDate: 'Start date',
-    endDate: 'End date',
+    numberOfDays: 'Number of days',
+    dailyProgram: 'Daily program',
+    day: 'Day',
+    city: 'City',
+    loadingCities: 'Loading cities...',
     budget: 'Budget',
     save: 'Save',
     upcomingTrips: 'Upcoming trips',
@@ -53,7 +71,11 @@ export const translations: Record<Language, UiTexts> = {
     tripName: 'Nom du voyage',
     country: 'Pays',
     startDate: 'Date de debut',
-    endDate: 'Date de fin',
+    numberOfDays: 'Nombre de jours',
+    dailyProgram: 'Programme quotidien',
+    day: 'Jour',
+    city: 'Ville',
+    loadingCities: 'Chargement des villes...',
     budget: 'Budget',
     save: 'Enregistrer',
     upcomingTrips: 'Voyages a venir',
@@ -71,7 +93,11 @@ export const translations: Record<Language, UiTexts> = {
     tripName: '旅行名称',
     country: '国家',
     startDate: '开始日期',
-    endDate: '结束日期',
+    numberOfDays: '天数',
+    dailyProgram: '每日行程',
+    day: '第',
+    city: '城市',
+    loadingCities: '正在加载城市...',
     budget: '预算',
     save: '保存',
     upcomingTrips: '即将开始的旅行',

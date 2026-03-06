@@ -45,36 +45,31 @@ onMounted(loadTrips)
 <template>
   <main class="page">
     <header class="page-header">
+      <div class="header-settings">
+        <div class="header-control">
+          <label>{{ texts.languageLabel }}</label>
+          <Dropdown
+            v-model="language"
+            :options="languageOptions"
+            option-label="label"
+            option-value="value"
+            class="compact-select"
+          />
+        </div>
+        <div class="header-control">
+          <label>{{ texts.currencyLabel }}</label>
+          <Dropdown
+            v-model="currency"
+            :options="currencyOptions"
+            option-label="label"
+            option-value="value"
+            class="compact-select"
+          />
+        </div>
+      </div>
       <h1>{{ texts.title }}</h1>
       <p class="subtitle">{{ texts.subtitle }}</p>
     </header>
-
-    <Card class="preferences-card">
-      <template #content>
-        <div class="preferences-grid">
-          <div class="field-group">
-            <label>{{ texts.languageLabel }}</label>
-            <Dropdown
-              v-model="language"
-              :options="languageOptions"
-              option-label="label"
-              option-value="value"
-              class="w-full"
-            />
-          </div>
-          <div class="field-group">
-            <label>{{ texts.currencyLabel }}</label>
-            <Dropdown
-              v-model="currency"
-              :options="currencyOptions"
-              option-label="label"
-              option-value="value"
-              class="w-full"
-            />
-          </div>
-        </div>
-      </template>
-    </Card>
 
     <TripCreator :texts="texts" :currency-code="currency" @created="loadTrips" />
 
