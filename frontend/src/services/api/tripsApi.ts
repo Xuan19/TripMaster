@@ -1,5 +1,6 @@
 import axios from 'axios'
 import type { TripPlanDetails } from '../../components/trip/types'
+import { getAuthToken } from './authSession'
 
 export interface Trip {
   id: number
@@ -23,6 +24,14 @@ export interface CreateTripPayload {
 const api = axios.create({
   // baseURL: 'http://localhost:5024/api'
   baseURL: 'https://localhost:7024/api'
+})
+
+api.interceptors.request.use((config) => {
+  const token = getAuthToken()
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
 })
 
 export async function getTrips(): Promise<Trip[]> {
