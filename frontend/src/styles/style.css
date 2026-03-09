@@ -62,6 +62,11 @@ body {
   margin-bottom: 1rem;
 }
 
+.edit-page-back.p-button {
+  width: auto;
+  margin-bottom: 0.5rem;
+}
+
 .field-group {
   display: grid;
   gap: 0.45rem;
@@ -434,11 +439,22 @@ body {
 .trip-card {
   cursor: pointer;
   transition: transform 0.14s ease, box-shadow 0.14s ease;
+  position: relative;
 }
 
 .trip-card:hover {
   transform: translateY(-1px);
   box-shadow: 0 8px 20px rgba(15, 23, 42, 0.09);
+}
+
+.edit-trip-btn.p-button {
+  position: absolute;
+  top: 0.55rem;
+  right: 0.55rem;
+  width: 2rem;
+  height: 2rem;
+  color: #475569;
+  z-index: 1;
 }
 
 .trip-detail-dialog {

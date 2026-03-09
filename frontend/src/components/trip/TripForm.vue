@@ -8,7 +8,7 @@ import InputText from 'primevue/inputtext'
 import MultiSelect from 'primevue/multiselect'
 import ProgressSpinner from 'primevue/progressspinner'
 import type { Currency, TripFormTexts } from '../../locales/i18n'
-import type { ActivityType, TripFormSubmitPayload } from './types'
+import type { ActivityType, TripFormInitialData, TripFormSubmitPayload } from './types'
 import { getAllCountries, getCitiesByCountry, getDistanceBetweenCities } from '../../services/api/geodataApi'
 
 interface DayActivity {
@@ -21,10 +21,20 @@ interface DayActivity {
 
 const DEFAULT_ACTIVITY_START_TIME = '08:00'
 
-const props = defineProps<{
-  texts: TripFormTexts
-  currencyCode: Currency
-}>()
+const props = withDefaults(
+  defineProps<{
+    texts: TripFormTexts
+    currencyCode: Currency
+    isSaving?: boolean
+    formTitle?: string
+    initialData?: TripFormInitialData | null
+  }>(),
+  {
+    isSaving: false,
+    formTitle: undefined,
+    initialData: null
+  }
+)
 
 const emit = defineEmits<{
   (e: 'submit', payload: TripFormSubmitPayload): void
@@ -149,6 +159,7 @@ watch(
 )
 
 watch(selectedCityOptions, () => {
+  if (!allCitiesLoaded.value) return
   form.cityStops = form.cityStops.map((dayStops) =>
     dayStops.map((city) => (selectedCitySet.value.has(city) ? city : ''))
   )
@@ -170,12 +181,12 @@ watch(
   () => [...form.countries],
   async (countries) => {
     if (cityLoaderTimer) clearTimeout(cityLoaderTimer)
-    pruneCitiesByCountries(countries)
 
     const countriesToFetch = countries.filter((country) => !fetchedCountries[country])
     if (countriesToFetch.length === 0) {
       cityLoading.value = false
       cityLoaderVisible.value = false
+      pruneCitiesByCountries(countries)
       return
     }
 
@@ -265,6 +276,51 @@ function toIsoDate(value: Date) {
   const month = `${value.getMonth() + 1}`.padStart(2, '0')
   const day = `${value.getDate()}`.padStart(2, '0')
   return `${year}-${month}-${day}`
+}
+
+function parseIsoDate(value: string) {
+  const [year, month, day] = value.split('-').map(Number)
+  if (!year || !month || !day) return new Date()
+  return new Date(year, month - 1, day)
+}
+
+function getTripDayCount(startDate: string, endDate: string, details?: TripFormInitialData['details']) {
+  if (details?.dayPlans?.length) return details.dayPlans.length
+  const start = parseIsoDate(startDate)
+  const end = parseIsoDate(endDate)
+  const diffMs = end.getTime() - start.getTime()
+  if (Number.isNaN(diffMs)) return 1
+  return Math.max(1, Math.floor(diffMs / (1000 * 60 * 60 * 24)) + 1)
+}
+
+function applyInitialData(initialData: TripFormInitialData | null) {
+  if (!initialData) return
+
+  const dayCount = getTripDayCount(initialData.startDate, initialData.endDate, initialData.details)
+  form.name = initialData.name
+  form.countries = initialData.countries.length ? [...initialData.countries] : ['France']
+  form.startDate = parseIsoDate(initialData.startDate)
+  form.numberOfDays = dayCount
+  form.budget = initialData.budget
+
+  const cityStopsFromDetails =
+    initialData.details?.dayPlans?.map((day) => {
+      const cities = day.cities.slice(0, 4)
+      return cities.length > 0 ? cities : ['']
+    }) ?? []
+  const activityFromDetails =
+    initialData.details?.dayPlans?.map((day) =>
+      day.activities.map((activity) => ({
+        startTime: activity.startTime,
+        endTime: activity.endTime,
+        type: activity.type,
+        name: activity.details,
+        cost: activity.cost
+      }))
+    ) ?? []
+
+  form.cityStops = Array.from({ length: dayCount }, (_, index) => cityStopsFromDetails[index] ?? [''])
+  form.dayActivities = Array.from({ length: dayCount }, (_, index) => activityFromDetails[index] ?? [])
 }
 
 function addCityStop(dayIndex: number) {
@@ -492,7 +548,7 @@ function hasSelectedCity(dayIndex: number) {
 }
 
 function handleSubmit() {
-  if (!canSubmit.value) return
+  if (!canSubmit.value || props.isSaving) return
 
   const endDate = itineraryDays.value[itineraryDays.value.length - 1].isoDate
   const startDate = toIsoDate(form.startDate as Date)
@@ -536,12 +592,20 @@ onMounted(async () => {
     countryOptions.value = [...fallbackCountryOptions].sort((a, b) => a.localeCompare(b))
   }
 })
+
+watch(
+  () => props.initialData,
+  (initialData) => {
+    applyInitialData(initialData)
+  },
+  { immediate: true }
+)
 </script>
 
 <template>
   <div class="trip-form-layout">
     <form class="trip-form" @submit.prevent="handleSubmit">
-      <h2>{{ props.texts.createTrip }}</h2>
+      <h2>{{ props.formTitle || props.texts.createTrip }}</h2>
 
       <div class="field-group">
         <label>{{ props.texts.tripName }}</label>
@@ -730,7 +794,7 @@ onMounted(async () => {
       </div>
       </section>
 
-      <Button type="submit" :label="props.texts.save" :disabled="!canSubmit" />
+      <Button type="submit" :label="props.texts.save" :disabled="!canSubmit || props.isSaving" :loading="props.isSaving" />
     </form>
 
     <aside class="budget-side-card">

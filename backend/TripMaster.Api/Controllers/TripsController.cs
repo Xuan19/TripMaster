@@ -62,6 +62,30 @@ public class TripsController : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id = trip.Id }, ToResponse(trip));
     }
 
+    [HttpPut("{id:int}")]
+    public async Task<ActionResult<TripResponse>> Update(int id, CreateTripRequest request)
+    {
+        if (request.EndDate < request.StartDate)
+        {
+            ModelState.AddModelError(nameof(request.EndDate), "End date must be after start date.");
+            return ValidationProblem(ModelState);
+        }
+
+        var trip = await _db.Trips.FindAsync(id);
+        if (trip is null) return NotFound();
+
+        trip.Name = request.Name;
+        trip.Country = request.Country;
+        trip.StartDate = request.StartDate;
+        trip.EndDate = request.EndDate;
+        trip.Budget = request.Budget;
+        trip.DetailsJson = request.Details?.GetRawText();
+
+        await _db.SaveChangesAsync();
+
+        return Ok(ToResponse(trip));
+    }
+
     private static TripResponse ToResponse(Trip trip)
     {
         JsonElement? details = null;

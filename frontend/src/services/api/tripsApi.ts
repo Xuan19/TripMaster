@@ -39,3 +39,8 @@ export async function createTrip(payload: CreateTripPayload): Promise<Trip> {
   const { data } = await api.post<Trip>('/trips', payload)
   return data
 }
+
+export async function updateTrip(id: number, payload: CreateTripPayload): Promise<Trip> {
+  const { data } = await api.put<Trip>(`/trips/${id}`, payload)
+  return data
+}

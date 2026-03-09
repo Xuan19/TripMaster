@@ -28,3 +28,12 @@ export interface TripFormSubmitPayload {
   budget: number
   details: TripPlanDetails
 }
+
+export interface TripFormInitialData {
+  name: string
+  countries: string[]
+  startDate: string
+  endDate: string
+  budget: number | null
+  details?: TripPlanDetails
+}

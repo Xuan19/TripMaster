@@ -7,6 +7,8 @@ export interface UiTexts {
   languageLabel: string
   currencyLabel: string
   createTrip: string
+  editTrip: string
+  back: string
   tripName: string
   country: string
   startDate: string
@@ -42,6 +44,7 @@ export interface UiTexts {
   budgetLabel: string
   connectError: string
   createError: string
+  createSuccess: string
 }
 
 export type TripFormTexts = Pick<
@@ -82,6 +85,8 @@ export const translations: Record<Language, UiTexts> = {
     languageLabel: 'Language',
     currencyLabel: 'Currency',
     createTrip: 'Create Trip',
+    editTrip: 'Edit Trip',
+    back: 'Back',
     tripName: 'Trip name',
     country: 'Country',
     startDate: 'Start date',
@@ -116,7 +121,8 @@ export const translations: Record<Language, UiTexts> = {
     savedActivities: 'Activities',
     budgetLabel: 'Budget',
     connectError: 'Could not connect to API. Make sure backend is running.',
-    createError: 'Trip creation failed. Check API validation rules.'
+    createError: 'Trip creation failed. Check API validation rules.',
+    createSuccess: 'Trip saved successfully.'
   },
   fr: {
     title: 'TripMaster',
@@ -124,6 +130,8 @@ export const translations: Record<Language, UiTexts> = {
     languageLabel: 'Langue',
     currencyLabel: 'Devise',
     createTrip: 'Creer un voyage',
+    editTrip: 'Modifier le voyage',
+    back: 'Retour',
     tripName: 'Nom du voyage',
     country: 'Pays',
     startDate: 'Date de debut',
@@ -158,7 +166,8 @@ export const translations: Record<Language, UiTexts> = {
     savedActivities: 'Activites',
     budgetLabel: 'Budget',
     connectError: "Impossible de se connecter a l'API. Verifiez que le backend est lance.",
-    createError: 'Echec de creation du voyage. Verifiez les regles de validation API.'
+    createError: 'Echec de creation du voyage. Verifiez les regles de validation API.',
+    createSuccess: 'Voyage enregistre avec succes.'
   },
   zh: {
     title: 'TripMaster',
@@ -166,6 +175,8 @@ export const translations: Record<Language, UiTexts> = {
     languageLabel: '语言',
     currencyLabel: '货币',
     createTrip: '创建旅行',
+    editTrip: '编辑旅行',
+    back: '返回',
     tripName: '旅行名称',
     country: '国家',
     startDate: '开始日期',
@@ -200,7 +211,8 @@ export const translations: Record<Language, UiTexts> = {
     savedActivities: '活动',
     budgetLabel: '预算',
     connectError: '无法连接到 API。请确认后端正在运行。',
-    createError: '创建旅行失败。请检查 API 校验规则。'
+    createError: '创建旅行失败。请检查 API 校验规则。',
+    createSuccess: '旅行保存成功。'
   }
 }
 
