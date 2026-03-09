@@ -270,7 +270,6 @@ const totalActivityCost = computed(() =>
 const remainingBudget = computed(() => Number(form.budget ?? 0) - totalActivityCost.value)
 const budgetSummaryValue = computed(() => (hasBudget.value ? formatMoney(Number(form.budget)) : '-'))
 const remainingBudgetSummaryValue = computed(() => (hasBudget.value ? formatMoney(remainingBudget.value) : '-'))
-
 function toIsoDate(value: Date) {
   const year = value.getFullYear()
   const month = `${value.getMonth() + 1}`.padStart(2, '0')
