@@ -887,4 +887,39 @@ body,
   border: none;
 }
 
+.logout-btn.p-button {
+  align-self: end;
+  width: auto;
+}
+
+.auth-main {
+  width: min(560px, 100%);
+  margin: 2rem auto;
+  padding: 0 1rem;
+}
+
+.auth-panel {
+  display: grid;
+  gap: 0.8rem;
+  padding: 1rem;
+  border: 1px solid #dbeafe;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+}
+
+.auth-panel h2 {
+  margin: 0;
+}
+
+.auth-panel .p-inputtext,
+.auth-panel .p-password,
+.auth-panel .p-password-input {
+  width: 100%;
+}
+
+.auth-switch-btn.p-button {
+  justify-self: start;
+  width: auto;
+}
+
 

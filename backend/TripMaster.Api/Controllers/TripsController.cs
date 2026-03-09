@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 using System.Text.Json;
 using TripMaster.Api.Data;
 using TripMaster.Api.Dtos;
@@ -9,6 +11,7 @@ namespace TripMaster.Api.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
+[Authorize]
 public class TripsController : ControllerBase
 {
     private readonly TripMasterDbContext _db;
@@ -21,7 +24,9 @@ public class TripsController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<IEnumerable<TripResponse>>> GetAll()
     {
+        var userId = GetCurrentUserId();
         var trips = await _db.Trips
+            .Where(t => t.UserId == userId)
             .OrderBy(t => t.StartDate)
             .ToListAsync();
 
@@ -31,7 +36,8 @@ public class TripsController : ControllerBase
     [HttpGet("{id:int}")]
     public async Task<ActionResult<TripResponse>> GetById(int id)
     {
-        var trip = await _db.Trips.FindAsync(id);
+        var userId = GetCurrentUserId();
+        var trip = await _db.Trips.SingleOrDefaultAsync(t => t.Id == id && t.UserId == userId);
         if (trip is null) return NotFound();
 
         return Ok(ToResponse(trip));
@@ -40,6 +46,7 @@ public class TripsController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<TripResponse>> Create(CreateTripRequest request)
     {
+        var userId = GetCurrentUserId();
         if (request.EndDate < request.StartDate)
         {
             ModelState.AddModelError(nameof(request.EndDate), "End date must be after start date.");
@@ -53,7 +60,8 @@ public class TripsController : ControllerBase
             StartDate = request.StartDate,
             EndDate = request.EndDate,
             Budget = request.Budget,
-            DetailsJson = request.Details?.GetRawText()
+            DetailsJson = request.Details?.GetRawText(),
+            UserId = userId
         };
 
         _db.Trips.Add(trip);
@@ -65,13 +73,14 @@ public class TripsController : ControllerBase
     [HttpPut("{id:int}")]
     public async Task<ActionResult<TripResponse>> Update(int id, CreateTripRequest request)
     {
+        var userId = GetCurrentUserId();
         if (request.EndDate < request.StartDate)
         {
             ModelState.AddModelError(nameof(request.EndDate), "End date must be after start date.");
             return ValidationProblem(ModelState);
         }
 
-        var trip = await _db.Trips.FindAsync(id);
+        var trip = await _db.Trips.SingleOrDefaultAsync(t => t.Id == id && t.UserId == userId);
         if (trip is null) return NotFound();
 
         trip.Name = request.Name;
@@ -84,6 +93,17 @@ public class TripsController : ControllerBase
         await _db.SaveChangesAsync();
 
         return Ok(ToResponse(trip));
+    }
+
+    private int GetCurrentUserId()
+    {
+        var rawId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (!int.TryParse(rawId, out var userId))
+        {
+            throw new UnauthorizedAccessException("Missing user id claim.");
+        }
+
+        return userId;
     }
 
     private static TripResponse ToResponse(Trip trip)

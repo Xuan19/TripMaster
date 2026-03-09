@@ -5,6 +5,7 @@ import AccordionTab from 'primevue/accordiontab'
 import Button from 'primevue/button'
 import Dropdown from 'primevue/dropdown'
 import { RouterView, useRoute, useRouter } from 'vue-router'
+import AuthPanel from '../components/auth/AuthPanel.vue'
 import logoUrl from '../assets/tripmaster-logo.svg'
 import { appUiContextKey } from './context'
 import {
@@ -16,6 +17,7 @@ import {
   type Language
 } from '../locales/i18n'
 import { getTrips, type Trip } from '../services/api/tripsApi'
+import { clearAuthSession, getAuthUsername, isAuthenticated } from '../services/api/authSession'
 
 const language = ref<Language>('en')
 const currency = ref<Currency>('EUR')
@@ -27,6 +29,8 @@ const trips = ref<Trip[]>([])
 const isSidebarLoading = ref(false)
 const sidebarLoadFailed = ref(false)
 const activeTripIndex = ref<number | null>(null)
+const isLoggedIn = ref(isAuthenticated())
+const authUsername = ref(getAuthUsername() ?? '')
 
 function goToCreateTrip() {
   if (route.name !== 'home') {
@@ -47,12 +51,17 @@ function formatBudget(value: number) {
 }
 
 async function loadSidebarTrips() {
+  if (!isLoggedIn.value) return
   isSidebarLoading.value = true
   sidebarLoadFailed.value = false
   try {
     const fetchedTrips = await getTrips()
     trips.value = [...fetchedTrips].sort((a, b) => b.id - a.id)
-  } catch {
+  } catch (error: any) {
+    if (error?.response?.status === 401) {
+      handleLogout()
+      return
+    }
     sidebarLoadFailed.value = true
   } finally {
     isSidebarLoading.value = false
@@ -64,7 +73,22 @@ function openTripInEditor(tripId: number) {
 }
 
 function handleTripChanged() {
+  if (!isLoggedIn.value) return
   void loadSidebarTrips()
+}
+
+function handleAuthenticated(username: string) {
+  authUsername.value = username
+  isLoggedIn.value = true
+  void loadSidebarTrips()
+}
+
+function handleLogout() {
+  clearAuthSession()
+  isLoggedIn.value = false
+  authUsername.value = ''
+  trips.value = []
+  activeTripIndex.value = null
 }
 
 onMounted(() => {
@@ -116,10 +140,19 @@ provide(appUiContextKey, {
             class="compact-select"
           />
         </div>
+        <Button
+          v-if="isLoggedIn"
+          type="button"
+          text
+          icon="pi pi-sign-out"
+          :label="`Logout (${authUsername})`"
+          class="logout-btn"
+          @click="handleLogout"
+        />
       </div>
     </header>
 
-    <div class="layout-grid">
+    <div v-if="isLoggedIn" class="layout-grid">
       <aside class="left-sidebar">
         <Button type="button" icon="pi pi-plus" :label="texts.createTrip" class="sidebar-create-btn" @click="goToCreateTrip" />
 
@@ -159,6 +192,9 @@ provide(appUiContextKey, {
         <RouterView />
       </main>
     </div>
+    <main v-else class="auth-main">
+      <AuthPanel @authenticated="handleAuthenticated" />
+    </main>
 
     <footer class="app-footer">
       <p>{{ texts.title }} · {{ currentYear }}</p>

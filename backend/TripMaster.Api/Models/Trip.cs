@@ -9,4 +9,6 @@ public class Trip
     public DateOnly EndDate { get; set; }
     public decimal Budget { get; set; }
     public string? DetailsJson { get; set; }
+    public int? UserId { get; set; }
+    public User? User { get; set; }
 }

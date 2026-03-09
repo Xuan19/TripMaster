@@ -11,6 +11,7 @@ public class TripMasterDbContext : DbContext
     }
 
     public DbSet<Trip> Trips => Set<Trip>();
+    public DbSet<User> Users => Set<User>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -21,6 +22,29 @@ public class TripMasterDbContext : DbContext
         modelBuilder.Entity<Trip>()
             .Property(t => t.DetailsJson)
             .HasColumnType("nvarchar(max)");
+
+        modelBuilder.Entity<User>()
+            .Property(u => u.Username)
+            .HasMaxLength(64);
+
+        modelBuilder.Entity<User>()
+            .Property(u => u.Email)
+            .HasMaxLength(256);
+
+        modelBuilder.Entity<User>()
+            .HasIndex(u => u.Username)
+            .IsUnique();
+
+        modelBuilder.Entity<User>()
+            .HasIndex(u => u.Email)
+            .IsUnique()
+            .HasFilter("[Email] IS NOT NULL");
+
+        modelBuilder.Entity<Trip>()
+            .HasOne(t => t.User)
+            .WithMany(u => u.Trips)
+            .HasForeignKey(t => t.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         base.OnModelCreating(modelBuilder);
     }
