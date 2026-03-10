@@ -3,7 +3,9 @@ import { computed, onBeforeUnmount, onMounted, provide, ref } from 'vue'
 import Accordion from 'primevue/accordion'
 import AccordionTab from 'primevue/accordiontab'
 import Button from 'primevue/button'
+import ConfirmDialog from 'primevue/confirmdialog'
 import Dropdown from 'primevue/dropdown'
+import { useConfirm } from 'primevue/useconfirm'
 import { RouterView, useRoute, useRouter } from 'vue-router'
 import AuthPanel from '../components/auth/AuthPanel.vue'
 import logoUrl from '../assets/tripmaster-logo.svg'
@@ -24,6 +26,7 @@ const currency = ref<Currency>('EUR')
 const texts = computed(() => translations[language.value])
 const route = useRoute()
 const router = useRouter()
+const confirm = useConfirm()
 const currentYear = new Date().getFullYear()
 const trips = ref<Trip[]>([])
 const isSidebarLoading = ref(false)
@@ -72,20 +75,28 @@ function openTripInEditor(tripId: number) {
   void router.push({ name: 'trip-edit', params: { id: String(tripId) } })
 }
 
-async function handleDeleteTrip(tripId: number) {
-  if (!window.confirm(texts.value.deleteTripConfirm)) return
-  try {
-    await deleteTrip(tripId)
-    if (route.name === 'trip-edit' && route.params.id === String(tripId)) {
-      await router.push({ name: 'home' })
+function handleDeleteTrip(tripId: number) {
+  confirm.require({
+    message: texts.value.deleteTripConfirm,
+    header: texts.value.deleteTrip,
+    icon: 'pi pi-exclamation-triangle',
+    rejectLabel: texts.value.back,
+    acceptLabel: texts.value.deleteTrip,
+    acceptClass: 'p-button-danger',
+    accept: async () => {
+      try {
+        await deleteTrip(tripId)
+        if (route.name === 'trip-edit' && route.params.id === String(tripId)) {
+          await router.push({ name: 'home' })
+        }
+        await loadSidebarTrips()
+      } catch (error: any) {
+        if (error?.response?.status === 401) {
+          handleLogout()
+        }
+      }
     }
-    await loadSidebarTrips()
-  } catch (error: any) {
-    if (error?.response?.status === 401) {
-      handleLogout()
-      return
-    }
-  }
+  })
 }
 
 function handleTripChanged() {
@@ -125,6 +136,7 @@ provide(appUiContextKey, {
 
 <template>
   <div class="app-shell">
+    <ConfirmDialog />
     <header class="app-header">
       <div class="brand-block">
         <img :src="logoUrl" alt="TripMaster logo" class="brand-logo" />
