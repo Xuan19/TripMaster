@@ -8,6 +8,8 @@ export interface UiTexts {
   currencyLabel: string
   createTrip: string
   editTrip: string
+  deleteTrip: string
+  deleteTripConfirm: string
   back: string
   tripName: string
   country: string
@@ -86,6 +88,8 @@ export const translations: Record<Language, UiTexts> = {
     currencyLabel: 'Currency',
     createTrip: 'Create Trip',
     editTrip: 'Edit Trip',
+    deleteTrip: 'Delete Trip',
+    deleteTripConfirm: 'Delete this trip?',
     back: 'Back',
     tripName: 'Trip name',
     country: 'Country',
@@ -131,6 +135,8 @@ export const translations: Record<Language, UiTexts> = {
     currencyLabel: 'Devise',
     createTrip: 'Creer un voyage',
     editTrip: 'Modifier le voyage',
+    deleteTrip: 'Supprimer le voyage',
+    deleteTripConfirm: 'Supprimer ce voyage ?',
     back: 'Retour',
     tripName: 'Nom du voyage',
     country: 'Pays',
@@ -176,6 +182,8 @@ export const translations: Record<Language, UiTexts> = {
     currencyLabel: '货币',
     createTrip: '创建旅行',
     editTrip: '编辑旅行',
+    deleteTrip: '删除旅行',
+    deleteTripConfirm: '删除此旅行？',
     back: '返回',
     tripName: '旅行名称',
     country: '国家',

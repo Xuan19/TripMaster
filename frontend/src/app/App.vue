@@ -16,7 +16,7 @@ import {
   type Currency,
   type Language
 } from '../locales/i18n'
-import { getTrips, type Trip } from '../services/api/tripsApi'
+import { deleteTrip, getTrips, type Trip } from '../services/api/tripsApi'
 import { clearAuthSession, getAuthUsername, isAuthenticated } from '../services/api/authSession'
 
 const language = ref<Language>('en')
@@ -70,6 +70,22 @@ async function loadSidebarTrips() {
 
 function openTripInEditor(tripId: number) {
   void router.push({ name: 'trip-edit', params: { id: String(tripId) } })
+}
+
+async function handleDeleteTrip(tripId: number) {
+  if (!window.confirm(texts.value.deleteTripConfirm)) return
+  try {
+    await deleteTrip(tripId)
+    if (route.name === 'trip-edit' && route.params.id === String(tripId)) {
+      await router.push({ name: 'home' })
+    }
+    await loadSidebarTrips()
+  } catch (error: any) {
+    if (error?.response?.status === 401) {
+      handleLogout()
+      return
+    }
+  }
 }
 
 function handleTripChanged() {
@@ -182,6 +198,14 @@ provide(appUiContextKey, {
                 :label="texts.editTrip"
                 class="sidebar-edit-btn"
                 @click="openTripInEditor(trip.id)"
+              />
+              <Button
+                type="button"
+                text
+                icon="pi pi-trash"
+                :label="texts.deleteTrip"
+                class="sidebar-delete-btn"
+                @click="handleDeleteTrip(trip.id)"
               />
             </div>
           </AccordionTab>

@@ -95,6 +95,19 @@ public class TripsController : ControllerBase
         return Ok(ToResponse(trip));
     }
 
+    [HttpDelete("{id:int}")]
+    public async Task<IActionResult> Delete(int id)
+    {
+        var userId = GetCurrentUserId();
+        var trip = await _db.Trips.SingleOrDefaultAsync(t => t.Id == id && t.UserId == userId);
+        if (trip is null) return NotFound();
+
+        _db.Trips.Remove(trip);
+        await _db.SaveChangesAsync();
+
+        return NoContent();
+    }
+
     private int GetCurrentUserId()
     {
         var rawId = User.FindFirstValue(ClaimTypes.NameIdentifier);

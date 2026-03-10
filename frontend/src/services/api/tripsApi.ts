@@ -53,3 +53,7 @@ export async function updateTrip(id: number, payload: CreateTripPayload): Promis
   const { data } = await api.put<Trip>(`/trips/${id}`, payload)
   return data
 }
+
+export async function deleteTrip(id: number): Promise<void> {
+  await api.delete(`/trips/${id}`)
+}
