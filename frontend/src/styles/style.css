@@ -25,7 +25,7 @@ body {
 }
 
 .page {
-  max-width: 980px;
+  max-width: 1160px;
   margin: 0 auto;
   padding: clamp(1rem, 3vw, 2rem) 1rem clamp(1.5rem, 4vw, 3rem);
 }
@@ -63,6 +63,9 @@ body {
   font-size: 0.82rem;
   padding-top: 0.35rem;
   padding-bottom: 0.35rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .compact-select.p-dropdown,
@@ -100,6 +103,18 @@ body {
 .trip-form .p-multiselect .p-multiselect-label,
 .trip-form .p-multiselect .p-placeholder {
   color: var(--tm-text);
+}
+
+.trip-form .p-inputtext,
+.trip-form .p-inputnumber .p-inputtext,
+.trip-form .p-dropdown .p-dropdown-label,
+.trip-form .p-multiselect .p-multiselect-label,
+.trip-form .p-multiselect-token-label,
+.auth-panel .p-inputtext,
+.auth-panel .p-password-input {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .trip-form .p-multiselect-token {
@@ -274,6 +289,24 @@ body {
   width: min(280px, 100%);
 }
 
+.auto-fill-row {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.auto-fill-cities-btn.p-button {
+  width: auto;
+  border-color: var(--tm-border-strong);
+  color: var(--tm-accent-strong);
+  background: #fff1f7;
+}
+
+.auto-fill-cities-btn.p-button:enabled:hover {
+  border-color: var(--tm-accent);
+  color: #8f0f46;
+  background: #ffe1ee;
+}
+
 .compact-field .p-calendar .p-datepicker-trigger {
   width: 1.9rem;
   min-width: 1.9rem;
@@ -297,6 +330,27 @@ body {
   color: #7a103f;
 }
 
+.trip-form-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px;
+  gap: var(--layout-gap);
+  align-items: start;
+  width: 100%;
+}
+
+.trip-form-main {
+  min-width: 880px;
+}
+
+.trip-summary-sidebar {
+  width: 240px;
+  min-width: 240px;
+  align-self: stretch;
+  display: flex;
+  min-height: calc(100vh - 6rem);
+  margin-left: 2rem ;
+}
+
 .trip-form {
   display: grid;
   gap: 0.85rem;
@@ -308,7 +362,7 @@ body {
 
 .trip-form-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 220px;
+  grid-template-columns: minmax(0, 1fr) 240px;
   gap: var(--layout-gap);
   align-items: start;
 }
@@ -324,6 +378,7 @@ body {
   box-shadow: 0 10px 20px rgba(219, 39, 119, 0.14);
   padding: 0.95rem 1rem;
   cursor: pointer;
+  align-self: center;
 }
 
 .budget-side-card p {
@@ -421,10 +476,10 @@ body {
 
 .itinerary-row {
   display: grid;
-  grid-template-columns: minmax(120px, 170px) 1fr;
+  grid-template-columns: minmax(145px, 190px) 1fr;
   gap: 0.6rem;
-  align-items: center;
-  padding: 0.65rem;
+  align-items: start;
+  padding: 0.8rem 0.9rem;
   border-radius: 10px;
   border: 1px solid var(--tm-border);
   background: var(--tm-surface-soft);
@@ -438,6 +493,9 @@ body {
 .itinerary-label {
   font-size: 0.9rem;
   color: var(--tm-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .itinerary-day-toggle {
@@ -476,8 +534,8 @@ body {
 }
 
 .city-select .p-dropdown-label {
-  overflow: visible;
-  text-overflow: clip;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -521,6 +579,9 @@ body {
   color: var(--tm-text);
   line-height: 1;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .arrow-line {
@@ -543,6 +604,12 @@ body {
   border-left: 7px solid var(--tm-muted);
 }
 
+.transport-icon {
+  font-size: 0.78rem;
+  color: var(--tm-accent-strong);
+  margin-top: 0.1rem;
+}
+
 .add-city-btn.p-button {
   border: none;
   box-shadow: none;
@@ -563,6 +630,7 @@ body {
   display: grid;
   gap: 0.45rem;
   min-width: 0;
+  width: 100%;
 }
 
 .add-activity-btn.p-button {
@@ -581,16 +649,37 @@ body {
 .activity-row {
   display: grid;
   grid-template-columns:
-    minmax(88px, 1.05fr)
-    minmax(88px, 1.05fr)
-    minmax(68px, 0.75fr)
-    minmax(110px, 1.1fr)
-    minmax(130px, 1.55fr)
-    minmax(92px, 1fr)
-    40px;
-  gap: 0.35rem;
-  align-items: start;
+    minmax(98px, 1fr)
+    minmax(98px, 1fr)
+    minmax(80px, 0.8fr)
+    minmax(128px, 1.1fr)
+    minmax(180px, 1.45fr)
+    minmax(116px, 1fr)
+    48px;
+  gap: 0.45rem;
+  align-items: end;
   min-width: 0;
+  width: 100%;
+}
+
+.p-tooltip .p-tooltip-arrow {
+  border-bottom-color: #7a103f !important;
+}
+
+.p-tooltip.p-tooltip-bottom .p-tooltip-arrow {
+  border-bottom-color: #7a103f !important;
+}
+
+.p-tooltip .p-tooltip-text {
+  max-width: 320px;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid rgba(255, 221, 234, 0.75);
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(122, 16, 63, 0.96), rgba(190, 24, 93, 0.96));
+  color: #fff7fb;
+  box-shadow: 0 12px 24px rgba(122, 16, 63, 0.24);
+  font-size: 0.8rem;
+  line-height: 1.35;
 }
 
 .activity-row > * {
@@ -646,12 +735,14 @@ body {
 }
 
 .remove-activity-btn.p-button {
-  width: 2rem;
+  width: 2.4rem;
+  min-width: 2.4rem;
+  height: 2.5rem;
   color: #b91c1c;
   opacity: 0.92;
   background: transparent;
   border: none;
-  min-height: 2rem;
+  padding: 0;
   justify-self: end;
   align-self: center;
 }
@@ -760,8 +851,14 @@ body {
     grid-template-columns: 1fr;
   }
 
-  .trip-form-layout {
+  .trip-form-shell {
     grid-template-columns: 1fr;
+  }
+
+  .trip-summary-sidebar {
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
   }
 
   .budget-side-card {
@@ -810,6 +907,20 @@ body {
 
   .activity-row {
     grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 1200px) {
+  .activity-row {
+    grid-template-columns:
+      minmax(96px, 1fr)
+      minmax(96px, 1fr)
+      minmax(78px, 0.75fr)
+      minmax(118px, 1fr)
+      minmax(150px, 1.2fr)
+      minmax(104px, 0.9fr)
+      44px;
+    gap: 0.35rem;
   }
 }
 
@@ -1004,7 +1115,7 @@ body,
 
 .page-content {
   min-width: 0;
-  max-width: calc(760px + 220px + var(--layout-gap));
+  max-width: none;
   width: 100%;
   margin: 0 auto;
 }
@@ -1195,5 +1306,3 @@ body,
   width: auto;
   color: var(--tm-accent-strong);
 }
-
-

@@ -14,6 +14,8 @@ interface CountriesNowCitiesResponse {
 const citiesCache = new Map<string, string[]>()
 const coordinatesCache = new Map<string, { lat: number; lon: number } | null>()
 const distanceCache = new Map<string, number | null>()
+const pendingCoordinatesCache = new Map<string, Promise<{ lat: number; lon: number } | null>>()
+const pendingDistanceCache = new Map<string, Promise<number | null>>()
 
 function sortUnique(values: string[]) {
   return Array.from(new Set(values.filter(Boolean))).sort((a, b) => a.localeCompare(b))
@@ -51,13 +53,24 @@ interface OpenMeteoResponse {
 async function getCoordinates(query: string): Promise<{ lat: number; lon: number } | null> {
   const cacheKey = query.toLowerCase()
   if (coordinatesCache.has(cacheKey)) return coordinatesCache.get(cacheKey) ?? null
+  const pending = pendingCoordinatesCache.get(cacheKey)
+  if (pending) return pending
 
-  const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=1&language=en&format=json`
-  const { data } = await axios.get<OpenMeteoResponse>(url)
-  const first = data.results?.[0]
-  const coords = first ? { lat: first.latitude, lon: first.longitude } : null
-  coordinatesCache.set(cacheKey, coords)
-  return coords
+  const request = (async () => {
+    const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=1&language=en&format=json`
+    const { data } = await axios.get<OpenMeteoResponse>(url)
+    const first = data.results?.[0]
+    const coords = first ? { lat: first.latitude, lon: first.longitude } : null
+    coordinatesCache.set(cacheKey, coords)
+    return coords
+  })()
+
+  pendingCoordinatesCache.set(cacheKey, request)
+  try {
+    return await request
+  } finally {
+    pendingCoordinatesCache.delete(cacheKey)
+  }
 }
 
 function haversineKm(a: { lat: number; lon: number }, b: { lat: number; lon: number }): number {
@@ -90,18 +103,29 @@ export async function getDistanceBetweenCities(
 ): Promise<number | null> {
   const key = `${fromCity.toLowerCase()}|${toCity.toLowerCase()}|${countries.join(',').toLowerCase()}`
   if (distanceCache.has(key)) return distanceCache.get(key) ?? null
+  const pending = pendingDistanceCache.get(key)
+  if (pending) return pending
 
-  const [fromCoords, toCoords] = await Promise.all([
-    resolveCityCoordinates(fromCity, countries),
-    resolveCityCoordinates(toCity, countries)
-  ])
+  const request = (async () => {
+    const [fromCoords, toCoords] = await Promise.all([
+      resolveCityCoordinates(fromCity, countries),
+      resolveCityCoordinates(toCity, countries)
+    ])
 
-  if (!fromCoords || !toCoords) {
-    distanceCache.set(key, null)
-    return null
+    if (!fromCoords || !toCoords) {
+      distanceCache.set(key, null)
+      return null
+    }
+
+    const distance = Math.round(haversineKm(fromCoords, toCoords))
+    distanceCache.set(key, distance)
+    return distance
+  })()
+
+  pendingDistanceCache.set(key, request)
+  try {
+    return await request
+  } finally {
+    pendingDistanceCache.delete(key)
   }
-
-  const distance = Math.round(haversineKm(fromCoords, toCoords))
-  distanceCache.set(key, distance)
-  return distance
 }

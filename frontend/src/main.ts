@@ -1,6 +1,7 @@
 import { createApp } from 'vue'
 import PrimeVue from 'primevue/config'
 import ConfirmationService from 'primevue/confirmationservice'
+import Tooltip from 'primevue/tooltip'
 import App from './app/App.vue'
 import { router } from './app/router'
 import './styles/style.css'
@@ -12,6 +13,7 @@ const app = createApp(App)
 
 app.use(PrimeVue)
 app.use(ConfirmationService)
+app.directive('tooltip', Tooltip)
 app.use(router)
 
 app.mount('#app')

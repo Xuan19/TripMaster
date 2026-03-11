@@ -19,6 +19,7 @@ export interface UiTexts {
   day: string
   city: string
   loadingCities: string
+  autoFillCities: string
   addActivity: string
   activityStartTime: string
   activityEndTime: string
@@ -60,6 +61,7 @@ export type TripFormTexts = Pick<
   | 'day'
   | 'city'
   | 'loadingCities'
+  | 'autoFillCities'
   | 'addActivity'
   | 'activityStartTime'
   | 'activityEndTime'
@@ -99,6 +101,7 @@ export const translations: Record<Language, UiTexts> = {
     day: 'Day',
     city: 'City',
     loadingCities: 'Loading cities...',
+    autoFillCities: 'Auto-fill cities',
     addActivity: 'Add activity',
     activityStartTime: 'Start time',
     activityEndTime: 'End time',
@@ -146,6 +149,7 @@ export const translations: Record<Language, UiTexts> = {
     day: 'Jour',
     city: 'Ville',
     loadingCities: 'Chargement des villes...',
+    autoFillCities: 'Remplir automatiquement les villes',
     addActivity: 'Ajouter une activite',
     activityStartTime: 'Heure de debut',
     activityEndTime: 'Heure de fin',
@@ -193,6 +197,7 @@ export const translations: Record<Language, UiTexts> = {
     day: '第',
     city: '城市',
     loadingCities: '正在加载城市...',
+    autoFillCities: '自动填充城市',
     addActivity: '添加活动',
     activityStartTime: '开始时间',
     activityEndTime: '结束时间',
