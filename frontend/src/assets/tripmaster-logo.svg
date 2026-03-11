@@ -1,11 +1,1 @@
-<svg width="220" height="220" viewBox="0 0 220 220" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <linearGradient id="tmGradient" x1="40" y1="20" x2="180" y2="200" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#0EA5E9"/>
-      <stop offset="1" stop-color="#22C55E"/>
-    </linearGradient>
-  </defs>
-  <rect x="12" y="12" width="196" height="196" rx="52" fill="url(#tmGradient)"/>
-  <path d="M58 67H162V85H121V154H99V85H58V67Z" fill="white"/>
-  <path d="M71 137L110 98L149 137" stroke="white" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/>
-</svg>
+﻿<svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="38" y="50" width="44" height="38" rx="4" fill="#f97316" stroke="#ea580c" stroke-width="2.5"></rect><line x1="38" y1="62" x2="82" y2="62" stroke="#ea580c" stroke-width="2"></line><line x1="38" y1="76" x2="82" y2="76" stroke="#ea580c" stroke-width="2"></line><path d="M52 50 Q60 42, 68 50" stroke="#ea580c" stroke-width="3" fill="none" stroke-linecap="round"></path><circle cx="60" cy="69" r="4" fill="#fef3c7" stroke="#ea580c" stroke-width="1.5"></circle><circle cx="46" cy="88" r="4" fill="#78716c" stroke="#57534e" stroke-width="1.5"></circle><circle cx="74" cy="88" r="4" fill="#78716c" stroke="#57534e" stroke-width="1.5"></circle><ellipse cx="60" cy="32" rx="16" ry="12" fill="#ec4899" stroke="#db2777" stroke-width="2.5"></ellipse><circle cx="73" cy="28" r="8" fill="#ec4899" stroke="#db2777" stroke-width="2"></circle><ellipse cx="79" cy="28" rx="3.5" ry="3" fill="#f9a8d4" stroke="#db2777" stroke-width="1.5"></ellipse><circle cx="78" cy="27" r="0.7" fill="#db2777"></circle><circle cx="78" cy="29" r="0.7" fill="#db2777"></circle><circle cx="71" cy="26" r="1.8" fill="white"></circle><circle cx="71" cy="26" r="0.9" fill="#1f2937"></circle><ellipse cx="72" cy="22" rx="2.5" ry="4" fill="#ec4899" stroke="#db2777" stroke-width="1.5"></ellipse><rect x="55" y="28" width="10" height="2.5" rx="1" fill="#db2777"></rect><circle cx="60" cy="18" r="6" fill="#fbbf24" stroke="#f59e0b" stroke-width="2"></circle><text x="60" y="21.5" font-size="7" fill="#f59e0b" font-weight="bold" text-anchor="middle">$</text><rect x="70" y="78" width="8" height="6" rx="1" fill="#3b82f6" opacity="0.8"></rect></svg>

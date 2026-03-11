@@ -793,7 +793,13 @@ watch(
       </div>
       </section>
 
-      <Button type="submit" :label="props.texts.save" :disabled="!canSubmit || props.isSaving" :loading="props.isSaving" />
+      <Button
+        type="submit"
+        :label="props.texts.save"
+        :disabled="!canSubmit || props.isSaving"
+        :loading="props.isSaving"
+        class="save-trip-btn"
+      />
     </form>
 
     <aside class="budget-side-card">

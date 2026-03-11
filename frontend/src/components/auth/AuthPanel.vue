@@ -161,6 +161,7 @@ async function submit() {
               : 'Reset password'
       "
       :loading="isSubmitting"
+      class="auth-primary-btn"
       @click="submit"
     />
 
