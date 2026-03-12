@@ -18,6 +18,11 @@ export interface UiTexts {
   dailyProgram: string
   day: string
   city: string
+  startCity: string
+  endCity: string
+  transportModes: string
+  stayPreferences: string
+  stayDays: string
   loadingCities: string
   autoFillCities: string
   addActivity: string
@@ -27,9 +32,15 @@ export interface UiTexts {
   activityVisit: string
   activityMeal: string
   activityTransport: string
+  transportWalk: string
+  transportLocal: string
+  transportTrain: string
+  transportDrive: string
+  transportFlight: string
   activityShopping: string
   activityOther: string
   activityName: string
+  estimatedTimeWarning: string
   activityAddress: string
   activityCost: string
   activityDuration: string
@@ -60,6 +71,11 @@ export type TripFormTexts = Pick<
   | 'dailyProgram'
   | 'day'
   | 'city'
+  | 'startCity'
+  | 'endCity'
+  | 'transportModes'
+  | 'stayPreferences'
+  | 'stayDays'
   | 'loadingCities'
   | 'autoFillCities'
   | 'addActivity'
@@ -69,9 +85,15 @@ export type TripFormTexts = Pick<
   | 'activityVisit'
   | 'activityMeal'
   | 'activityTransport'
+  | 'transportWalk'
+  | 'transportLocal'
+  | 'transportTrain'
+  | 'transportDrive'
+  | 'transportFlight'
   | 'activityShopping'
   | 'activityOther'
   | 'activityName'
+  | 'estimatedTimeWarning'
   | 'activityAddress'
   | 'activityCost'
   | 'activityDuration'
@@ -100,18 +122,29 @@ export const translations: Record<Language, UiTexts> = {
     dailyProgram: 'Daily program',
     day: 'Day',
     city: 'City',
+    startCity: 'Start city',
+    endCity: 'End city',
+    transportModes: 'Transport',
+    stayPreferences: 'Stay by city',
+    stayDays: 'Days',
     loadingCities: 'Loading cities...',
-    autoFillCities: 'Auto-fill cities',
+    autoFillCities: 'Generate itinerary',
     addActivity: 'Add activity',
     activityStartTime: 'Start time',
     activityEndTime: 'End time',
     activityType: 'Type',
     activityVisit: 'Visit',
     activityMeal: 'Meal',
-    activityTransport: 'Transport',
-    activityShopping: 'Shopping',
+    activityTransport: 'Travel',
+    transportWalk: 'Walk',
+    transportLocal: 'Local',
+    transportTrain: 'Train',
+    transportDrive: 'Drive',
+    transportFlight: 'Flight',
+    activityShopping: 'Shops',
     activityOther: 'Other',
     activityName: 'Details',
+    estimatedTimeWarning: 'Estimated time',
     activityAddress: 'Address',
     activityCost: 'Cost',
     activityDuration: 'Duration',
@@ -148,18 +181,29 @@ export const translations: Record<Language, UiTexts> = {
     dailyProgram: 'Programme quotidien',
     day: 'Jour',
     city: 'Ville',
+    startCity: 'Ville de depart',
+    endCity: 'Ville d arrivee',
+    transportModes: 'Transports',
+    stayPreferences: 'Sejour par ville',
+    stayDays: 'Jours',
     loadingCities: 'Chargement des villes...',
-    autoFillCities: 'Remplir automatiquement les villes',
+    autoFillCities: 'Generer l itineraire',
     addActivity: 'Ajouter une activite',
     activityStartTime: 'Heure de debut',
     activityEndTime: 'Heure de fin',
     activityType: 'Type',
     activityVisit: 'Visite',
     activityMeal: 'Repas',
-    activityTransport: 'Transport',
-    activityShopping: 'Shopping',
+    activityTransport: 'Trajet',
+    transportWalk: 'Marche',
+    transportLocal: 'Local',
+    transportTrain: 'Train',
+    transportDrive: 'Voiture',
+    transportFlight: 'Vol',
+    activityShopping: 'Achats',
     activityOther: 'Autre',
     activityName: 'Details',
+    estimatedTimeWarning: 'Horaire estime',
     activityAddress: 'Adresse',
     activityCost: 'Cout',
     activityDuration: 'Duree',
@@ -196,8 +240,13 @@ export const translations: Record<Language, UiTexts> = {
     dailyProgram: '每日行程',
     day: '第',
     city: '城市',
+    startCity: '起始城市',
+    endCity: '结束城市',
+    transportModes: '交通方式',
+    stayPreferences: '城市停留',
+    stayDays: '天数',
     loadingCities: '正在加载城市...',
-    autoFillCities: '自动填充城市',
+    autoFillCities: '生成行程',
     addActivity: '添加活动',
     activityStartTime: '开始时间',
     activityEndTime: '结束时间',
@@ -205,9 +254,15 @@ export const translations: Record<Language, UiTexts> = {
     activityVisit: '参观',
     activityMeal: '用餐',
     activityTransport: '交通',
+    transportWalk: '步行',
+    transportLocal: '本地交通',
+    transportTrain: '火车',
+    transportDrive: '开车',
+    transportFlight: '航班',
     activityShopping: '购物',
     activityOther: '其他',
     activityName: '详情',
+    estimatedTimeWarning: '预计时间',
     activityAddress: '地址',
     activityCost: '费用',
     activityDuration: '时长',

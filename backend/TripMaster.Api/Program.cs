@@ -2,7 +2,9 @@ using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using TripMaster.Api.Configuration;
 using TripMaster.Api.Data;
+using TripMaster.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
@@ -15,6 +17,8 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddDbContext<TripMasterDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("TripMasterDb")));
 builder.Services.AddScoped<DatabaseInitializer>();
+builder.Services.Configure<TransportRestOptions>(builder.Configuration.GetSection(TransportRestOptions.SectionName));
+builder.Services.AddHttpClient<TransportRestJourneyService>();
 
 var jwtKey = builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("Missing Jwt:Key configuration.");
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "TripMaster.Api";

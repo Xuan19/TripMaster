@@ -9,7 +9,21 @@ import MultiSelect from 'primevue/multiselect'
 import ProgressSpinner from 'primevue/progressspinner'
 import type { Currency, TripFormTexts } from '../../locales/i18n'
 import type { ActivityType, TripFormInitialData, TripFormSubmitPayload } from './types'
+import {
+  estimateTransportCost,
+  fallbackCitiesByCountry,
+  fallbackCountryOptions,
+  getEstimatedTransportCostDetails,
+  getGeneratedMealCostDetails,
+  getGeneratedMealPlan,
+  getGeneratedVisitCost,
+  getGeneratedVisitCostDetails,
+  getGeneratedVisitName,
+  isTouristHub
+} from './tripEstimation'
+import type { TransportMode } from './tripEstimation'
 import { getAllCountries, getCitiesByCountry, getDistanceBetweenCities } from '../../services/api/geodataApi'
+import { getTrainJourney } from '../../services/api/transportApi'
 
 interface DayActivity {
   startTime: string
@@ -17,7 +31,18 @@ interface DayActivity {
   type: ActivityType
   name: string
   cost: number | null
+  costDetails?: string
+  estimatedCost?: boolean
+  estimatedTime?: boolean
+  transportMode?: TransportMode | null
 }
+
+interface StayPreference {
+  city: string
+  days: number | null
+}
+
+const defaultAllowedTransportModes: TransportMode[] = ['walk', 'local', 'train', 'drive', 'flight']
 
 const DEFAULT_ACTIVITY_START_TIME = '08:00'
 
@@ -40,32 +65,6 @@ const emit = defineEmits<{
   (e: 'submit', payload: TripFormSubmitPayload): void
 }>()
 
-const fallbackCountryOptions = [
-  'China',
-  'France',
-  'Japan',
-  'United States',
-  'United Kingdom',
-  'Italy',
-  'Spain',
-  'Germany',
-  'Canada',
-  'Australia'
-]
-
-const fallbackCitiesByCountry: Record<string, string[]> = {
-  China: ['Beijing', 'Shanghai', 'Shenzhen', 'Guangzhou'],
-  France: ['Paris', 'Lyon', 'Marseille', 'Nice'],
-  Japan: ['Tokyo', 'Osaka', 'Kyoto', 'Yokohama'],
-  'United States': ['New York', 'Los Angeles', 'Chicago', 'San Francisco'],
-  'United Kingdom': ['London', 'Manchester', 'Liverpool', 'Edinburgh'],
-  Italy: ['Rome', 'Milan', 'Venice', 'Florence'],
-  Spain: ['Madrid', 'Barcelona', 'Valencia', 'Seville'],
-  Germany: ['Berlin', 'Munich', 'Frankfurt', 'Hamburg'],
-  Canada: ['Toronto', 'Montreal', 'Vancouver', 'Calgary'],
-  Australia: ['Sydney', 'Melbourne', 'Brisbane', 'Perth']
-}
-
 const countryOptions = ref<string[]>([...fallbackCountryOptions])
 const citiesByCountry = reactive<Record<string, string[]>>({ ...fallbackCitiesByCountry })
 const fetchedCountries = reactive<Record<string, boolean>>({})
@@ -77,6 +76,8 @@ const draggingCity = ref<{ dayIndex: number; cityIndex: number } | null>(null)
 const cityLoaderVisible = ref(false)
 const expandedDays = ref<Record<number, boolean>>({})
 const autoFillingCities = ref(false)
+const activityLoadingByDay = ref<Record<number, boolean>>({})
+const skipCountryReset = ref(false)
 let distanceDebounceTimer: ReturnType<typeof setTimeout> | null = null
 let cityLoaderTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -85,6 +86,10 @@ const form = reactive({
   countries: ['France'] as string[],
   startDate: new Date(),
   numberOfDays: null as number | null,
+  routeStartCity: '',
+  routeEndCity: '',
+  allowedTransportModes: [...defaultAllowedTransportModes] as TransportMode[],
+  stayPreferences: [] as StayPreference[],
   cityStops: [] as string[][],
   dayActivities: [] as DayActivity[][],
   budget: null as number | null
@@ -96,8 +101,6 @@ const allCitiesLoaded = computed(
 )
 
 const selectedCityOptions = computed(() => {
-  if (!allCitiesLoaded.value) return []
-
   const citySet = new Set<string>()
 
   form.countries.forEach((country) => {
@@ -108,7 +111,34 @@ const selectedCityOptions = computed(() => {
   return Array.from(citySet).sort((a, b) => a.localeCompare(b))
 })
 
+const routeCityOptions = computed(() => {
+  const orderedCities: string[] = []
+  const seen = new Set<string>()
+
+  form.countries.forEach((country) => {
+    const popularCities = fallbackCitiesByCountry[country] ?? []
+    const allCities = citiesByCountry[country] ?? []
+    const mergedCities = [...popularCities, ...allCities]
+
+    mergedCities.forEach((city) => {
+      const key = city.toLowerCase()
+      if (seen.has(key)) return
+      seen.add(key)
+      orderedCities.push(city)
+    })
+  })
+
+  return orderedCities
+})
+
 const selectedCitySet = computed(() => new Set(selectedCityOptions.value))
+const maxStayPreferenceRows = computed(() => {
+  const dayCount = Math.max(0, Math.floor(form.numberOfDays ?? 0))
+  return Math.max(1, Math.min(routeCityOptions.value.length, dayCount || 2))
+})
+const canAddStayPreference = computed(
+  () => form.stayPreferences.length > 0 && form.stayPreferences.length < maxStayPreferenceRows.value
+)
 
 const itineraryDays = computed(() => {
   if (!form.startDate || !form.numberOfDays || form.numberOfDays < 1) return []
@@ -133,6 +163,14 @@ const activityTypeOptions = computed(() => [
   { value: 'transport', label: props.texts.activityTransport },
   { value: 'shopping', label: props.texts.activityShopping },
   { value: 'other', label: props.texts.activityOther }
+])
+
+const transportModeOptions = computed(() => [
+  { value: 'walk' as TransportMode, label: props.texts.transportWalk },
+  { value: 'local' as TransportMode, label: props.texts.transportLocal },
+  { value: 'train' as TransportMode, label: props.texts.transportTrain },
+  { value: 'drive' as TransportMode, label: props.texts.transportDrive },
+  { value: 'flight' as TransportMode, label: props.texts.transportFlight }
 ])
 
 watch(
@@ -164,7 +202,71 @@ watch(selectedCityOptions, () => {
   form.cityStops = form.cityStops.map((dayStops) =>
     dayStops.map((city) => (selectedCitySet.value.has(city) ? city : ''))
   )
+  if (form.routeStartCity && !selectedCitySet.value.has(form.routeStartCity)) {
+    form.routeStartCity = ''
+  }
+  if (form.routeEndCity && !selectedCitySet.value.has(form.routeEndCity)) {
+    form.routeEndCity = ''
+  }
 })
+
+watch(
+  routeCityOptions,
+  (cities) => {
+    const preservedPreferences = form.stayPreferences
+      .map((preference) => ({
+        city: preference.city && cities.includes(preference.city) ? preference.city : '',
+        days: preference.days ?? null
+      }))
+      .filter((preference) => preference.city || preference.days !== null)
+      .slice(0, maxStayPreferenceRows.value)
+
+    const nextPreferences = preservedPreferences.length > 0
+      ? preservedPreferences
+      : cities.length > 0
+        ? [{ city: '', days: null }]
+        : []
+
+    if (nextPreferences.length > maxStayPreferenceRows.value) {
+      form.stayPreferences = nextPreferences.slice(0, maxStayPreferenceRows.value)
+      return
+    }
+
+    if (nextPreferences.length === 0 && cities.length > 0) {
+      form.stayPreferences = [{ city: '', days: null }]
+      return
+    }
+
+    form.stayPreferences = nextPreferences
+  },
+  { immediate: true }
+)
+
+watch(
+  maxStayPreferenceRows,
+  (rowLimit) => {
+    if (form.stayPreferences.length > rowLimit) {
+      form.stayPreferences = form.stayPreferences.slice(0, rowLimit)
+    }
+
+    if (form.stayPreferences.length === 0 && routeCityOptions.value.length > 0) {
+      form.stayPreferences = [{ city: '', days: null }]
+    }
+  },
+  { immediate: true }
+)
+
+function addStayPreferenceRow() {
+  if (form.stayPreferences.length >= maxStayPreferenceRows.value) return
+  form.stayPreferences.push({
+    city: '',
+    days: null
+  })
+}
+
+function hasActiveStayPreferences() {
+  return form.stayPreferences.some((preference) => preference.city.trim().length > 0)
+}
 
 function pruneCitiesByCountries(countries: string[]) {
   const allowed = new Set<string>()
@@ -178,10 +280,43 @@ function pruneCitiesByCountries(countries: string[]) {
   )
 }
 
+function resetTripDataForCountryChange() {
+  form.name = ''
+  form.startDate = new Date()
+  form.numberOfDays = null
+  form.routeStartCity = ''
+  form.routeEndCity = ''
+  form.allowedTransportModes = [...defaultAllowedTransportModes]
+  form.stayPreferences = []
+  form.cityStops = []
+  form.dayActivities = []
+  form.budget = null
+  expandedDays.value = {}
+  activityLoadingByDay.value = {}
+
+  Object.keys(segmentDistances).forEach((key) => {
+    delete segmentDistances[key]
+  })
+  Object.keys(segmentLoading).forEach((key) => {
+    delete segmentLoading[key]
+  })
+  Object.keys(segmentSignatures).forEach((key) => {
+    delete segmentSignatures[key]
+  })
+}
+
 watch(
   () => [...form.countries],
-  async (countries) => {
+  async (countries, previousCountries) => {
     if (cityLoaderTimer) clearTimeout(cityLoaderTimer)
+    const previous = previousCountries ?? []
+    const hasCountrySelectionChanged =
+      previous.length > 0 &&
+      (previous.length !== countries.length || previous.some((country, index) => country !== countries[index]))
+
+    if (hasCountrySelectionChanged && !skipCountryReset.value) {
+      resetTripDataForCountryChange()
+    }
 
     const countriesToFetch = countries.filter((country) => !fetchedCountries[country])
     if (countriesToFetch.length === 0) {
@@ -307,11 +442,14 @@ function applyInitialData(initialData: TripFormInitialData | null) {
   if (!initialData) return
 
   const dayCount = getTripDayCount(initialData.startDate, initialData.endDate, initialData.details)
+  skipCountryReset.value = true
   form.name = initialData.name
   form.countries = initialData.countries.length ? [...initialData.countries] : ['France']
   form.startDate = parseIsoDate(initialData.startDate)
   form.numberOfDays = dayCount
   form.budget = initialData.budget
+  form.allowedTransportModes = [...defaultAllowedTransportModes]
+  form.stayPreferences = []
 
   const cityStopsFromDetails =
     initialData.details?.dayPlans?.map((day) => {
@@ -325,12 +463,32 @@ function applyInitialData(initialData: TripFormInitialData | null) {
         endTime: activity.endTime,
         type: activity.type,
         name: activity.details,
-        cost: activity.cost
+        cost: activity.cost,
+        costDetails: '',
+        estimatedCost: false,
+        estimatedTime: false,
+        transportMode: null
       }))
     ) ?? []
 
   form.cityStops = Array.from({ length: dayCount }, (_, index) => cityStopsFromDetails[index] ?? [''])
   form.dayActivities = Array.from({ length: dayCount }, (_, index) => activityFromDetails[index] ?? [])
+  form.routeStartCity = cityStopsFromDetails[0]?.[0] ?? ''
+  const lastDayCities = cityStopsFromDetails[cityStopsFromDetails.length - 1] ?? []
+  form.routeEndCity = lastDayCities[lastDayCities.length - 1] ?? ''
+  const stayCounts: Record<string, number> = {}
+  cityStopsFromDetails.forEach((dayCities) => {
+    const signature = dayCities.join(' -> ')
+    if (!signature) return
+    const targetCity = dayCities[dayCities.length - 1] ?? dayCities[0]
+    if (!targetCity) return
+    stayCounts[targetCity] = (stayCounts[targetCity] ?? 0) + 1
+  })
+  form.stayPreferences = Object.entries(stayCounts).map(([city, days]) => ({
+    city,
+    days
+  }))
+  skipCountryReset.value = false
 }
 
 function addCityStop(dayIndex: number) {
@@ -345,8 +503,6 @@ interface CityCandidate {
   countryOrder: number
 }
 
-type TransportMode = 'walk' | 'local' | 'train' | 'drive' | 'flight' | 'unknown'
-
 function getCityCandidates() {
   const candidates: CityCandidate[] = []
   const seen = new Set<string>()
@@ -356,10 +512,13 @@ function getCityCandidates() {
   form.countries.forEach((country, countryOrder) => {
     const availableCities = citiesByCountry[country] ?? []
     const popularCities = fallbackCitiesByCountry[country] ?? []
-    const orderedCities = [
-      ...popularCities.filter((city) => availableCities.includes(city)),
-      ...availableCities.filter((city) => !popularCities.includes(city))
-    ].slice(0, perCountryLimit)
+    const curatedPopularCities =
+      popularCities.length > 0
+        ? popularCities
+        : availableCities.slice(0, perCountryLimit)
+    const orderedCities = curatedPopularCities
+      .filter((city) => availableCities.length === 0 || availableCities.includes(city))
+      .slice(0, perCountryLimit)
 
     orderedCities.forEach((city, index) => {
       const key = city.toLowerCase()
@@ -371,6 +530,20 @@ function getCityCandidates() {
         popularityRank: index < popularCities.length && popularCities.includes(city) ? index : popularCities.length + index,
         countryOrder
       })
+    })
+  })
+
+  ;[form.routeStartCity, form.routeEndCity].forEach((city) => {
+    const trimmedCity = city.trim()
+    if (!trimmedCity) return
+    const key = trimmedCity.toLowerCase()
+    if (seen.has(key)) return
+    seen.add(key)
+    candidates.push({
+      name: trimmedCity,
+      country: form.countries[0] ?? 'France',
+      popularityRank: 0,
+      countryOrder: 0
     })
   })
 
@@ -391,22 +564,37 @@ async function getOrderedRoute(candidates: CityCandidate[]) {
     if (left.countryOrder !== right.countryOrder) return left.countryOrder - right.countryOrder
     return left.name.localeCompare(right.name)
   })
-  const route: CityCandidate[] = [remaining.shift() as CityCandidate]
+  const startKey = form.routeStartCity.trim().toLowerCase()
+  const endKey = form.routeEndCity.trim().toLowerCase()
+  const startIndex = startKey ? remaining.findIndex((candidate) => candidate.name.toLowerCase() === startKey) : -1
+  const startCandidate = startIndex >= 0 ? remaining.splice(startIndex, 1)[0] : (remaining.shift() as CityCandidate)
+  const route: CityCandidate[] = [startCandidate]
+  const endCandidate =
+    endKey && endKey !== startCandidate.name.toLowerCase()
+      ? remaining.find((candidate) => candidate.name.toLowerCase() === endKey) ?? null
+      : null
 
   while (remaining.length > 0) {
+    if (endCandidate && remaining.length === 1 && remaining[0].name.toLowerCase() === endCandidate.name.toLowerCase()) {
+      route.push(remaining.shift() as CityCandidate)
+      break
+    }
+
     const current = route[route.length - 1]
     const scored = await Promise.all(
-      remaining.map(async (candidate) => {
+      remaining
+        .filter((candidate) => !endCandidate || candidate.name.toLowerCase() !== endCandidate.name.toLowerCase() || remaining.length === 1)
+        .map(async (candidate) => {
         const distance = await getDistanceBetweenCities(current.name, candidate.name, form.countries)
         const weightedScore =
           (distance ?? 5000) + candidate.popularityRank * 160 + candidate.countryOrder * 80
 
-        return {
-          candidate,
-          distance,
-          weightedScore
-        }
-      })
+          return {
+            candidate,
+            distance,
+            weightedScore
+          }
+        })
     )
 
     scored.sort((left, right) => {
@@ -437,13 +625,50 @@ function getTransportModeForDistance(distance: number | null): TransportMode {
   return 'flight'
 }
 
+function getAllowedTransportModeForDistance(distance: number | null): TransportMode {
+  const inferredMode = getTransportModeForDistance(distance)
+  if (inferredMode === 'unknown') return inferredMode
+
+  const allowedModes = form.allowedTransportModes.length > 0 ? form.allowedTransportModes : defaultAllowedTransportModes
+  if (allowedModes.includes(inferredMode)) return inferredMode
+
+  const fallbackOrder: TransportMode[] =
+    distance === null
+      ? ['train', 'drive', 'local', 'flight', 'walk']
+      : distance <= 25
+        ? ['walk', 'local', 'train', 'drive', 'flight']
+        : distance <= 80
+          ? ['local', 'train', 'drive', 'walk', 'flight']
+          : distance <= 250
+            ? ['train', 'drive', 'local', 'flight', 'walk']
+            : distance <= 450
+              ? ['drive', 'train', 'flight', 'local', 'walk']
+              : ['flight', 'train', 'drive', 'local', 'walk']
+
+  return fallbackOrder.find((mode) => allowedModes.includes(mode)) ?? inferredMode
+}
+
 function canGroupCitiesInSameDay(distance: number | null, transportMode: TransportMode) {
   if (distance === null) return false
   return transportMode === 'walk' || transportMode === 'local' || transportMode === 'train'
 }
 
-function isTouristHub(cityName: string) {
-  return Object.values(fallbackCitiesByCountry).some((cities) => cities.slice(0, 2).includes(cityName))
+function getPreferredStayDaysByCity() {
+  const preferredDays = new Map<string, number>()
+
+  if (!hasActiveStayPreferences()) {
+    return preferredDays
+  }
+
+  form.stayPreferences.forEach((preference) => {
+    const city = preference.city.trim()
+    if (!city) return
+
+    const days = Math.max(1, Math.floor(preference.days ?? 1))
+    preferredDays.set(city, days)
+  })
+
+  return preferredDays
 }
 
 function buildStayFocusedCityStops(orderedRoute: CityCandidate[], dayCount: number) {
@@ -454,6 +679,18 @@ function buildStayFocusedCityStops(orderedRoute: CityCandidate[], dayCount: numb
 
   const plannedDays = [...routeNames]
   let remainingExtraDays = Math.max(0, dayCount - plannedDays.length)
+  const preferredStayDaysByCity = getPreferredStayDaysByCity()
+
+  orderedRoute.forEach((city) => {
+    let extraPreferredDays = Math.max(0, (preferredStayDaysByCity.get(city.name) ?? 1) - 1)
+    while (extraPreferredDays > 0 && remainingExtraDays > 0) {
+      const insertAfterIndex = plannedDays.lastIndexOf(city.name)
+      plannedDays.splice(insertAfterIndex + 1, 0, city.name)
+      remainingExtraDays -= 1
+      extraPreferredDays -= 1
+    }
+  })
+
   const stayPriority = orderedRoute
     .map((city, index) => ({
       city,
@@ -499,7 +736,7 @@ async function buildAutoFilledCityStops(orderedRoute: CityCandidate[], dayCount:
       const currentRouteCity = orderedRoute[routeIndex]
       const nextCity = orderedRoute[routeIndex + 1]
       const distance = await getDistanceBetweenCities(currentRouteCity.name, nextCity.name, form.countries)
-      const transportMode = getTransportModeForDistance(distance)
+      const transportMode = getAllowedTransportModeForDistance(distance)
       const remainingDays = dayCount - dayIndex - 1
       const remainingCities = orderedRoute.length - routeIndex - 1
       const mustAdvanceToday = remainingCities > remainingDays
@@ -534,6 +771,44 @@ async function buildAutoFilledCityStops(orderedRoute: CityCandidate[], dayCount:
   return dayStops
 }
 
+function applySelectedRouteEndpoints(dayStops: string[][]) {
+  if (dayStops.length === 0) return dayStops
+
+  const normalized = dayStops.map((stops) => [...stops])
+  const startCity = form.routeStartCity.trim()
+  const endCity = form.routeEndCity.trim()
+
+  if (startCity) {
+    normalized[0] = normalized[0]?.length ? [...normalized[0]] : ['']
+    normalized[0][0] = startCity
+  }
+
+  if (endCity) {
+    const lastDayIndex = normalized.length - 1
+    const lastDayStops = normalized[lastDayIndex]?.length ? [...normalized[lastDayIndex]] : ['']
+    const lastStopIndex = Math.max(0, lastDayStops.length - 1)
+    lastDayStops[lastStopIndex] = endCity
+    normalized[lastDayIndex] = lastDayStops
+  }
+
+  for (let dayIndex = 1; dayIndex < normalized.length; dayIndex += 1) {
+    const previousStops = normalized[dayIndex - 1] ?? []
+    const currentStops = normalized[dayIndex] ?? []
+    const previousEndCity = previousStops[previousStops.length - 1]?.trim()
+
+    if (!previousEndCity || currentStops.length === 0) continue
+
+    if (currentStops.length === 1) {
+      normalized[dayIndex] = [currentStops[0]]
+      continue
+    }
+
+    normalized[dayIndex][0] = previousEndCity
+  }
+
+  return normalized
+}
+
 function timeToMinutes(value: string) {
   const [hours, minutes] = value.split(':').map(Number)
   return hours * 60 + minutes
@@ -544,6 +819,17 @@ function minutesToTime(totalMinutes: number) {
   const hours = `${Math.floor(normalized / 60)}`.padStart(2, '0')
   const minutes = `${normalized % 60}`.padStart(2, '0')
   return `${hours}:${minutes}`
+}
+
+function toIsoDateTime(date: string, time: string) {
+  return `${date}T${time}:00`
+}
+
+function formatApiTime(value: string | null | undefined) {
+  if (!value) return null
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return null
+  return `${`${parsed.getHours()}`.padStart(2, '0')}:${`${parsed.getMinutes()}`.padStart(2, '0')}`
 }
 
 function addGeneratedActivity(
@@ -560,24 +846,56 @@ function addGeneratedActivity(
     endTime,
     type,
     name,
-    cost: 0
+    cost: 0,
+    costDetails: '',
+    estimatedCost: false,
+    estimatedTime: false,
+    transportMode: null
   })
 
   return startMinutes + durationMinutes
 }
 
 function getTransportDurationMinutes(mode: TransportMode, distance: number | null) {
-  if (mode === 'walk') return 30
-  if (mode === 'local') return 45
-  if (mode === 'train') return 90
-  if (mode === 'drive') return 150
-  if (mode === 'flight') return 240
-  if (distance !== null && distance <= 120) return 75
-  return 120
+  if (distance === null) {
+    if (mode === 'walk') return 25
+    if (mode === 'local') return 45
+    if (mode === 'train') return 120
+    if (mode === 'drive') return 180
+    if (mode === 'flight') return 300
+    return 120
+  }
+
+  const roundedDuration = (minutes: number) => Math.max(15, Math.ceil(minutes / 5) * 5)
+
+  if (mode === 'walk') {
+    return roundedDuration(Math.min(120, 10 + (distance / 4.5) * 60))
+  }
+
+  if (mode === 'local') {
+    return roundedDuration(20 + (distance / 28) * 60)
+  }
+
+  if (mode === 'train') {
+    return roundedDuration(25 + (distance / 95) * 60)
+  }
+
+  if (mode === 'drive') {
+    return roundedDuration(20 + (distance / 70) * 60)
+  }
+
+  if (mode === 'flight') {
+    return roundedDuration(120 + (distance / 700) * 60)
+  }
+
+  if (distance <= 120) return roundedDuration(30 + (distance / 45) * 60)
+  return roundedDuration(60 + (distance / 80) * 60)
 }
 
 async function buildAutoActivities(dayStops: string[][]) {
   const dayActivities: DayActivity[][] = []
+  const visitCountsByCity: Record<string, number> = {}
+  const mealCountsByCity: Record<string, number> = {}
 
   for (let dayIndex = 0; dayIndex < dayStops.length; dayIndex += 1) {
     const cities = dayStops[dayIndex].map((city) => city.trim()).filter((city) => city.length > 0)
@@ -592,24 +910,40 @@ async function buildAutoActivities(dayStops: string[][]) {
 
     for (let cityIndex = 0; cityIndex < cities.length; cityIndex += 1) {
       const city = cities[cityIndex]
+      const visitIndex = visitCountsByCity[city] ?? 0
       currentMinutes = addGeneratedActivity(
         activities,
         currentMinutes,
         120,
         'visit',
-        `${props.texts.activityVisit} - ${city} highlights`
+        getGeneratedVisitName(city, visitIndex)
       )
+      activities[activities.length - 1].cost = getGeneratedVisitCost(city, visitIndex, itineraryDays.value[dayIndex]?.isoDate)
+      activities[activities.length - 1].costDetails = getGeneratedVisitCostDetails(
+        city,
+        visitIndex,
+        itineraryDays.value[dayIndex]?.isoDate,
+        formatMoney
+      )
+      activities[activities.length - 1].estimatedCost = true
+      visitCountsByCity[city] = visitIndex + 1
 
       currentMinutes += 30
 
       if (!mealAdded && currentMinutes >= timeToMinutes('12:00')) {
+        const mealIndex = mealCountsByCity[city] ?? 0
+        const mealPlan = getGeneratedMealPlan(city, mealIndex, form.countries[0])
         currentMinutes = addGeneratedActivity(
           activities,
           currentMinutes,
           60,
           'meal',
-          `${props.texts.activityMeal} - ${city}`
+          mealPlan.name
         )
+        activities[activities.length - 1].cost = mealPlan.cost
+        activities[activities.length - 1].costDetails = getGeneratedMealCostDetails(city, mealIndex, form.countries[0])
+        activities[activities.length - 1].estimatedCost = true
+        mealCountsByCity[city] = mealIndex + 1
         currentMinutes += 30
         mealAdded = true
       }
@@ -617,40 +951,146 @@ async function buildAutoActivities(dayStops: string[][]) {
       if (cityIndex < cities.length - 1) {
         const nextCity = cities[cityIndex + 1]
         const distance = await getDistanceBetweenCities(city, nextCity, form.countries)
-        const transportMode = getTransportModeForDistance(distance)
-        const transportLabel = transportMode === 'unknown' ? props.texts.activityTransport : `${props.texts.activityTransport} - ${transportMode}`
-        currentMinutes = addGeneratedActivity(
-          activities,
-          currentMinutes,
-          getTransportDurationMinutes(transportMode, distance),
-          'transport',
-          `${transportLabel}: ${city} -> ${nextCity}`
+        const transportMode = getAllowedTransportModeForDistance(distance)
+        let transportStartMinutes = currentMinutes
+        let transportEndMinutes = currentMinutes + getTransportDurationMinutes(transportMode, distance)
+        let estimatedTime = true
+        let hasRealTransportPrice = false
+        let transportCost = estimateTransportCost(
+          transportMode,
+          distance,
+          city,
+          form.countries[0],
+          itineraryDays.value[dayIndex]?.isoDate,
+          null
         )
-        currentMinutes += 30
+        let transportCostDetails = getEstimatedTransportCostDetails(
+          transportMode,
+          distance,
+          city,
+          form.countries[0],
+          formatMoney,
+          itineraryDays.value[dayIndex]?.isoDate,
+          null
+        )
+        let transportDetail =
+          transportMode === 'unknown'
+            ? `${city} -> ${nextCity}`
+            : `${transportMode} - ${city} -> ${nextCity}`
+
+        if (transportMode === 'train' && itineraryDays.value[dayIndex]) {
+          const journey = await getTrainJourney(
+            city,
+            nextCity,
+            toIsoDateTime(itineraryDays.value[dayIndex].isoDate, minutesToTime(currentMinutes))
+          )
+
+          const apiStart = formatApiTime(journey?.departureDateTime)
+          const apiEnd = formatApiTime(journey?.arrivalDateTime)
+          if (apiStart) {
+            transportStartMinutes = timeToMinutes(apiStart)
+          }
+
+          if (apiEnd) {
+            transportEndMinutes = timeToMinutes(apiEnd)
+          } else if (journey?.durationSeconds) {
+            transportEndMinutes = transportStartMinutes + Math.max(1, Math.round(journey.durationSeconds / 60))
+          }
+
+          if (apiStart && apiEnd) {
+            estimatedTime = false
+          }
+
+          const reference = journey?.trainReference?.trim() || journey?.trainLabel?.trim()
+          if (reference) {
+            transportDetail = `Train - ${reference}`
+            transportCost = estimateTransportCost(
+              transportMode,
+              distance,
+              city,
+              form.countries[0],
+              itineraryDays.value[dayIndex]?.isoDate,
+              reference
+            )
+            transportCostDetails = getEstimatedTransportCostDetails(
+              transportMode,
+              distance,
+              city,
+              form.countries[0],
+              formatMoney,
+              itineraryDays.value[dayIndex]?.isoDate,
+              reference
+            )
+          }
+
+          if (
+            typeof journey?.ticketPrice === 'number' &&
+            Number.isFinite(journey.ticketPrice) &&
+            (!journey.ticketCurrency || journey.ticketCurrency === props.currencyCode)
+          ) {
+            transportCost = journey.ticketPrice
+            transportCostDetails = `Real price. Ticket fare${journey.ticketCurrency ? ` (${journey.ticketCurrency})` : ''}`
+            hasRealTransportPrice = true
+          }
+        }
+
+        activities.push({
+          startTime: minutesToTime(transportStartMinutes),
+          endTime: minutesToTime(Math.max(transportStartMinutes, transportEndMinutes)),
+          type: 'transport',
+          name: transportDetail,
+          cost: transportCost,
+          costDetails: transportCostDetails,
+          estimatedCost: transportMode !== 'walk' && !hasRealTransportPrice,
+          estimatedTime,
+          transportMode
+        })
+        currentMinutes = Math.max(transportStartMinutes, transportEndMinutes) + 30
       }
     }
 
     if (!mealAdded) {
+      const mealCity = cities[cities.length - 1]
+      const mealIndex = mealCountsByCity[mealCity] ?? 0
+      const mealPlan = getGeneratedMealPlan(mealCity, mealIndex, form.countries[0])
       currentMinutes = addGeneratedActivity(
         activities,
         Math.max(currentMinutes, timeToMinutes('12:30')),
         60,
         'meal',
-        `${props.texts.activityMeal} - ${cities[cities.length - 1]}`
+        mealPlan.name
       )
+      activities[activities.length - 1].cost = mealPlan.cost
+      activities[activities.length - 1].costDetails = getGeneratedMealCostDetails(mealCity, mealIndex, form.countries[0])
+      activities[activities.length - 1].estimatedCost = true
+      mealCountsByCity[mealCity] = mealIndex + 1
       currentMinutes += 30
     }
 
     const finalCity = cities[cities.length - 1]
     const shouldAddExtraVisit = cities.length === 1 || isTouristHub(finalCity)
     if (shouldAddExtraVisit && activities.length < 5) {
+      const visitIndex = visitCountsByCity[finalCity] ?? 0
       addGeneratedActivity(
         activities,
         Math.max(currentMinutes, timeToMinutes('15:30')),
         120,
         'visit',
-        `${props.texts.activityVisit} - ${finalCity} top sights`
+        getGeneratedVisitName(finalCity, visitIndex)
       )
+      activities[activities.length - 1].cost = getGeneratedVisitCost(
+        finalCity,
+        visitIndex,
+        itineraryDays.value[dayIndex]?.isoDate
+      )
+      activities[activities.length - 1].costDetails = getGeneratedVisitCostDetails(
+        finalCity,
+        visitIndex,
+        itineraryDays.value[dayIndex]?.isoDate,
+        formatMoney
+      )
+      activities[activities.length - 1].estimatedCost = true
+      visitCountsByCity[finalCity] = visitIndex + 1
     }
 
     dayActivities.push(activities)
@@ -665,22 +1105,83 @@ async function autoFillCities() {
   autoFillingCities.value = true
   try {
     const dayCount = Math.max(1, Math.floor(form.numberOfDays ?? 0))
+    activityLoadingByDay.value = Object.fromEntries(Array.from({ length: dayCount }, (_, index) => [index, true]))
     const candidates = getCityCandidates()
     if (candidates.length === 0) return
 
     const orderedRoute = await getOrderedRoute(candidates)
-    const cityStops = await buildAutoFilledCityStops(orderedRoute, dayCount)
+    const cityStops = applySelectedRouteEndpoints(await buildAutoFilledCityStops(orderedRoute, dayCount))
     form.cityStops = cityStops
     form.dayActivities = await buildAutoActivities(cityStops)
     expandedDays.value = Object.fromEntries(Array.from({ length: dayCount }, (_, index) => [index, true]))
   } finally {
     autoFillingCities.value = false
+    activityLoadingByDay.value = {}
+  }
+}
+
+async function regenerateActivitiesForDay(dayIndex: number) {
+  if (dayIndex < 0 || dayIndex >= form.cityStops.length) return
+
+  activityLoadingByDay.value = {
+    ...activityLoadingByDay.value,
+    [dayIndex]: true
+  }
+  try {
+    const generatedActivities = await buildAutoActivities([form.cityStops[dayIndex] ?? []])
+    form.dayActivities[dayIndex] = generatedActivities[0] ?? []
+
+    if (form.dayActivities[dayIndex].length > 0) {
+      expandedDays.value[dayIndex] = true
+    }
+  } finally {
+    activityLoadingByDay.value = {
+      ...activityLoadingByDay.value,
+      [dayIndex]: false
+    }
+  }
+}
+
+function syncLinkedDayStartsFrom(dayIndex: number) {
+  const affectedDays = new Set<number>()
+
+  for (let index = Math.max(0, dayIndex); index < form.cityStops.length - 1; index += 1) {
+    const currentDayStops = form.cityStops[index] ?? []
+    const nextDayStops = form.cityStops[index + 1] ?? []
+
+    if (nextDayStops.length === 0) continue
+
+    const endCity = currentDayStops[currentDayStops.length - 1] ?? ''
+    if (nextDayStops[0] === endCity) continue
+
+    nextDayStops[0] = endCity
+    affectedDays.add(index + 1)
+  }
+
+  return Array.from(affectedDays).sort((left, right) => left - right)
+}
+
+async function syncDayBoundariesAndActivities(dayIndex: number) {
+  const affectedDays = new Set<number>([dayIndex])
+
+  syncLinkedDayStartsFrom(dayIndex).forEach((affectedDay) => {
+    affectedDays.add(affectedDay)
+  })
+
+  for (const affectedDay of Array.from(affectedDays).sort((left, right) => left - right)) {
+    await regenerateActivitiesForDay(affectedDay)
   }
 }
 
 function removeCityStop(dayIndex: number, cityIndex: number) {
   if (form.cityStops[dayIndex].length <= 1) return
   form.cityStops[dayIndex].splice(cityIndex, 1)
+  void syncDayBoundariesAndActivities(dayIndex)
+}
+
+function handleCityStopChange(dayIndex: number, cityIndex: number, value: string) {
+  form.cityStops[dayIndex][cityIndex] = value
+  void syncDayBoundariesAndActivities(dayIndex)
 }
 
 function addActivity(dayIndex: number) {
@@ -693,7 +1194,11 @@ function addActivity(dayIndex: number) {
     endTime: startTime,
     type: 'visit',
     name: '',
-    cost: null
+    cost: null,
+    costDetails: '',
+    estimatedCost: false,
+    estimatedTime: false,
+    transportMode: null
   })
 
   expandedDays.value[dayIndex] = true
@@ -808,6 +1313,7 @@ function handleCityDrop(dayIndex: number, targetIndex: number) {
   dayStops.splice(targetIndex, 0, moved)
   form.cityStops[dayIndex] = dayStops
   draggingCity.value = null
+  void syncDayBoundariesAndActivities(dayIndex)
 }
 
 function handleCityDragEnd() {
@@ -883,7 +1389,7 @@ function getTransportIcon(dayIndex: number, segmentIndex: number) {
   if (!fromCity || !toCity) return 'pi pi-arrow-right'
 
   const distance = segmentDistances[key] ?? null
-  const mode = getTransportModeForDistance(distance)
+  const mode = getAllowedTransportModeForDistance(distance)
 
   switch (mode) {
     case 'walk':
@@ -891,7 +1397,7 @@ function getTransportIcon(dayIndex: number, segmentIndex: number) {
     case 'local':
       return 'pi pi-car'
     case 'train':
-      return 'pi pi-truck'
+      return 'transport-icon-train'
     case 'drive':
       return 'pi pi-car'
     case 'flight':
@@ -926,6 +1432,10 @@ function hasActivities(dayIndex: number) {
 
 function hasSelectedCity(dayIndex: number) {
   return form.cityStops[dayIndex]?.some((city) => city.trim().length > 0) ?? false
+}
+
+function isActivitiesLoading(dayIndex: number) {
+  return activityLoadingByDay.value[dayIndex] === true
 }
 
 function handleSubmit() {
@@ -1041,6 +1551,83 @@ watch(
           </div>
         </div>
 
+        <div class="date-days-row">
+          <div class="field-group compact-field">
+            <label>{{ props.texts.startCity }}</label>
+            <Dropdown
+              v-model="form.routeStartCity"
+              :options="routeCityOptions"
+              :placeholder="props.texts.startCity"
+              :filter="true"
+              :virtual-scroller-options="{ itemSize: 36 }"
+              :disabled="!hasSelectedCountry"
+              :loading="cityLoading"
+            />
+          </div>
+
+          <div class="field-group compact-field">
+            <label>{{ props.texts.endCity }}</label>
+            <Dropdown
+              v-model="form.routeEndCity"
+              :options="routeCityOptions"
+              :placeholder="props.texts.endCity"
+              :filter="true"
+              :virtual-scroller-options="{ itemSize: 36 }"
+              :disabled="!hasSelectedCountry"
+              :loading="cityLoading"
+            />
+          </div>
+        </div>
+
+        <div class="date-days-row">
+          <div class="field-group compact-field">
+            <label>{{ props.texts.transportModes }}</label>
+            <MultiSelect
+              v-model="form.allowedTransportModes"
+              :options="transportModeOptions"
+              option-label="label"
+              option-value="value"
+              :show-toggle-all="false"
+              display="chip"
+              :placeholder="props.texts.transportModes"
+              :disabled="!hasSelectedCountry"
+            />
+          </div>
+        </div>
+
+        <div v-if="form.stayPreferences.length > 0" class="field-group">
+          <label>{{ props.texts.stayPreferences }}</label>
+          <div class="stay-preferences-grid">
+            <div v-for="(preference, index) in form.stayPreferences" :key="`stay-preference-${index}`" class="stay-preference-row">
+              <Dropdown
+                v-model="preference.city"
+                :options="routeCityOptions"
+                :placeholder="props.texts.city"
+                :filter="true"
+                :virtual-scroller-options="{ itemSize: 36 }"
+                :disabled="!hasSelectedCountry"
+              />
+              <InputNumber
+                v-model="preference.days"
+                mode="decimal"
+                :min="1"
+                :max="Math.max(1, Math.floor(form.numberOfDays ?? 1))"
+                :max-fraction-digits="0"
+                :placeholder="props.texts.stayDays"
+              />
+            </div>
+            <Button
+              v-if="canAddStayPreference"
+              type="button"
+              text
+              rounded
+              icon="pi pi-plus"
+              class="add-stay-preference-btn"
+              @click="addStayPreferenceRow"
+            />
+          </div>
+        </div>
+
         <div class="auto-fill-row">
           <Button
             type="button"
@@ -1048,7 +1635,6 @@ watch(
             class="auto-fill-cities-btn"
             :label="props.texts.autoFillCities"
             :disabled="!canAutoFillCities"
-            :loading="autoFillingCities"
             @click="autoFillCities"
           />
         </div>
@@ -1056,84 +1642,98 @@ watch(
         <section v-if="itineraryDays.length" class="itinerary-section">
           <h3>{{ props.texts.dailyProgram }}</h3>
           <div v-for="item in itineraryDays" :key="item.index" class="itinerary-row">
-            <button
-              v-if="hasActivities(item.index)"
-              type="button"
-              class="itinerary-day-toggle"
-              @click="toggleDayActivities(item.index)"
-            >
-              <span v-tooltip.bottom="getDayLabel(item.day, item.displayDate)" class="itinerary-label">{{ getDayLabel(item.day, item.displayDate) }}</span>
-              <i class="pi" :class="isDayExpanded(item.index) ? 'pi-chevron-down' : 'pi-chevron-right'" />
-            </button>
-            <span v-else v-tooltip.bottom="getDayLabel(item.day, item.displayDate)" class="itinerary-label">{{ getDayLabel(item.day, item.displayDate) }}</span>
-            <div class="city-stops-inline">
-              <template v-for="(_, cityIndex) in form.cityStops[item.index]" :key="`${item.index}-${cityIndex}`">
-                <div
-                  v-tooltip.bottom="form.cityStops[item.index][cityIndex] || props.texts.city"
-                  class="city-stop-inline"
-                  @dragover.prevent
-                  @drop.prevent="handleCityDrop(item.index, cityIndex)"
-                >
-                  <Button
-                    type="button"
-                    icon="pi pi-bars"
-                    text
-                    rounded
-                    class="drag-city-btn"
-                    draggable="true"
-                    @dragstart="handleCityDragStart($event, item.index, cityIndex)"
-                    @dragend="handleCityDragEnd"
-                  />
-                  <Dropdown
-                    v-model="form.cityStops[item.index][cityIndex]"
-                    :options="selectedCityOptions"
-                    :placeholder="allCitiesLoaded ? props.texts.city : props.texts.loadingCities"
-                    :filter="true"
-                    :virtual-scroller-options="{ itemSize: 36 }"
-                    class="city-select"
-                    :disabled="!allCitiesLoaded"
-                    :loading="!allCitiesLoaded"
-                    :style="{ width: getCitySelectWidth(form.cityStops[item.index][cityIndex]) }"
-                  />
-                  <Button
-                    v-if="form.cityStops[item.index].length > 1"
-                    type="button"
-                    icon="pi pi-trash"
-                    text
-                    rounded
-                    class="remove-city-btn"
-                    @click="removeCityStop(item.index, cityIndex)"
-                  />
-                </div>
-                <div v-if="cityIndex < form.cityStops[item.index].length - 1" class="city-connector">
-                  <span v-tooltip.bottom="getDistanceLabel(item.index, cityIndex)" class="distance-label">{{ getDistanceLabel(item.index, cityIndex) }}</span>
-                  <span class="arrow-line" />
-                  <i v-tooltip.bottom="getDistanceLabel(item.index, cityIndex)" :class="['transport-icon', 'pi', getTransportIcon(item.index, cityIndex)]" />
-                </div>
-              </template>
-
-              <Button
-                v-if="form.cityStops[item.index].length < 4"
+            <div class="itinerary-header">
+              <button
+                v-if="hasActivities(item.index)"
                 type="button"
-                icon="pi pi-plus"
-                text
-                rounded
-                class="add-city-btn"
-                :disabled="!allCitiesLoaded"
-                @click="addCityStop(item.index)"
-              />
+                class="itinerary-day-toggle"
+                @click="toggleDayActivities(item.index)"
+              >
+                <span v-tooltip.bottom="getDayLabel(item.day, item.displayDate)" class="itinerary-label">{{ getDayLabel(item.day, item.displayDate) }}</span>
+                <i class="pi" :class="isDayExpanded(item.index) ? 'pi-chevron-down' : 'pi-chevron-right'" />
+              </button>
+              <span v-else v-tooltip.bottom="getDayLabel(item.day, item.displayDate)" class="itinerary-label">{{ getDayLabel(item.day, item.displayDate) }}</span>
+              <div class="city-stops-inline">
+                <template v-for="(_, cityIndex) in form.cityStops[item.index]" :key="`${item.index}-${cityIndex}`">
+                  <div
+                    v-tooltip.bottom="form.cityStops[item.index][cityIndex] || props.texts.city"
+                    class="city-stop-inline"
+                    @dragover.prevent
+                    @drop.prevent="handleCityDrop(item.index, cityIndex)"
+                  >
+                    <Button
+                      type="button"
+                      icon="pi pi-bars"
+                      text
+                      rounded
+                      class="drag-city-btn"
+                      draggable="true"
+                      @dragstart="handleCityDragStart($event, item.index, cityIndex)"
+                      @dragend="handleCityDragEnd"
+                    />
+                    <Dropdown
+                      :model-value="form.cityStops[item.index][cityIndex]"
+                      @update:model-value="handleCityStopChange(item.index, cityIndex, String($event ?? ''))"
+                      :options="selectedCityOptions"
+                      :placeholder="allCitiesLoaded ? props.texts.city : props.texts.loadingCities"
+                      :filter="true"
+                      :virtual-scroller-options="{ itemSize: 36 }"
+                      class="city-select"
+                      :disabled="!allCitiesLoaded"
+                      :loading="!allCitiesLoaded"
+                      :style="{ width: getCitySelectWidth(form.cityStops[item.index][cityIndex]) }"
+                    />
+                    <Button
+                      v-if="form.cityStops[item.index].length > 1"
+                      type="button"
+                      icon="pi pi-trash"
+                      text
+                      rounded
+                      class="remove-city-btn"
+                      @click="removeCityStop(item.index, cityIndex)"
+                    />
+                  </div>
+                  <div v-if="cityIndex < form.cityStops[item.index].length - 1" class="city-connector">
+                    <span v-tooltip.bottom="getDistanceLabel(item.index, cityIndex)" class="distance-label">{{ getDistanceLabel(item.index, cityIndex) }}</span>
+                    <span class="arrow-line" />
+                    <i v-tooltip.bottom="getDistanceLabel(item.index, cityIndex)" :class="['transport-icon', getTransportIcon(item.index, cityIndex)]" />
+                  </div>
+                </template>
+
+                <Button
+                  v-if="form.cityStops[item.index].length < 4"
+                  type="button"
+                  icon="pi pi-plus"
+                  text
+                  rounded
+                  class="add-city-btn"
+                  :disabled="!allCitiesLoaded"
+                  @click="addCityStop(item.index)"
+                />
+              </div>
             </div>
             <div
               v-if="(hasSelectedCity(item.index) || hasActivities(item.index)) && (!hasActivities(item.index) || isDayExpanded(item.index))"
-              class="activities-section"
+              class="activities-panel"
             >
+              <div v-if="isActivitiesLoading(item.index)" class="activities-loader">
+                <ProgressSpinner style="width: 24px; height: 24px" stroke-width="6" />
+              </div>
+              <div v-else class="activities-section">
               <div
                 v-for="(activity, activityIndex) in form.dayActivities[item.index]"
                 :key="`${item.index}-activity-${activityIndex}`"
                 class="activity-row"
               >
                 <div class="activity-time-field">
-                  <small>{{ props.texts.activityStartTime }}</small>
+                  <small class="activity-time-label">
+                    <i
+                      v-if="activity.type === 'transport' && activity.transportMode === 'train' && activity.estimatedTime"
+                      v-tooltip.bottom="props.texts.estimatedTimeWarning"
+                      class="pi pi-exclamation-triangle activity-warning-icon"
+                    />
+                    <span>{{ props.texts.activityStartTime }}</span>
+                  </small>
                   <InputText
                     :model-value="activity.startTime"
                     type="time"
@@ -1170,13 +1770,24 @@ watch(
                   v-tooltip.bottom="activity.name || props.texts.activityName"
                   :placeholder="props.texts.activityName"
                 />
-                <InputNumber
-                  v-model="activity.cost"
-                  mode="currency"
-                  :currency="props.currencyCode"
-                  :min="0"
-                  :placeholder="props.texts.activityCost"
-                />
+                <div class="activity-cost-field">
+                  <InputNumber
+                    v-model="activity.cost"
+                    mode="currency"
+                    :currency="props.currencyCode"
+                    :min="0"
+                    :placeholder="props.texts.activityCost"
+                  />
+                  <button
+                    v-if="activity.costDetails"
+                    v-tooltip.bottom="activity.costDetails"
+                    type="button"
+                    class="activity-cost-info"
+                    aria-label="Cost details"
+                  >
+                    <i class="pi pi-info-circle" />
+                  </button>
+                </div>
                 <Button
                   type="button"
                   icon="pi pi-trash"
@@ -1194,6 +1805,7 @@ watch(
                 :label="props.texts.addActivity"
                 @click="addActivity(item.index)"
               />
+              </div>
             </div>
           </div>
         </section>
