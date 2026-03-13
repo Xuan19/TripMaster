@@ -25,6 +25,16 @@ interface TrainFareProfile {
   extraLongFloor: number
 }
 
+interface VisitSiteMetadata {
+  durationMinutes?: number
+  areaGroup?: string
+}
+
+interface VisitTransferInfo {
+  mode: 'walk' | 'local' | 'drive'
+  durationMinutes: number
+}
+
 export const fallbackCountryOptions = [
   'China',
   'France',
@@ -110,46 +120,88 @@ const countryLocalTransitBaseFare: Record<string, number> = {
 }
 
 const cityHighlightsByName: Record<string, string[]> = {
-  beijing: ['Forbidden City', 'Temple of Heaven', 'Summer Palace', 'Mutianyu Great Wall'],
-  shanghai: ['The Bund', 'Yu Garden', 'Shanghai Tower', 'Nanjing Road'],
-  shenzhen: ['Window of the World', 'OCT Loft', 'Dameisha Beach', 'Ping An Finance Centre'],
-  guangzhou: ['Canton Tower', 'Shamian Island', 'Chen Clan Ancestral Hall', 'Yuexiu Park'],
-  paris: ['Eiffel Tower', 'Louvre Museum', 'Notre-Dame Cathedral', 'Montmartre'],
-  lyon: ['Basilica of Notre-Dame de Fourviere', 'Vieux Lyon', "Parc de la Tete d'Or", 'Place Bellecour'],
-  marseille: ['Old Port', 'Notre-Dame de la Garde', 'Le Panier', 'Mucem'],
-  nice: ['Promenade des Anglais', 'Castle Hill', 'Old Nice', 'Marc Chagall National Museum'],
-  tokyo: ['Senso-ji Temple', 'Shibuya Crossing', 'Tokyo Skytree', 'Meiji Jingu'],
-  osaka: ['Dotonbori', 'Osaka Castle', 'Shinsekai', 'Umeda Sky Building'],
-  kyoto: ['Fushimi Inari Taisha', 'Kiyomizu-dera', 'Arashiyama Bamboo Grove', 'Kinkaku-ji'],
-  yokohama: ['Minato Mirai', 'Sankeien Garden', 'Yokohama Chinatown', 'Cup Noodles Museum'],
-  'new york': ['Statue of Liberty', 'Central Park', 'Times Square', 'Metropolitan Museum of Art'],
-  'los angeles': ['Griffith Observatory', 'Santa Monica Pier', 'Getty Center', 'Hollywood Walk of Fame'],
-  chicago: ['Millennium Park', 'Art Institute of Chicago', 'Navy Pier', 'Willis Tower Skydeck'],
-  'san francisco': ['Golden Gate Bridge', 'Alcatraz Island', "Fisherman's Wharf", 'Palace of Fine Arts'],
-  london: ['Buckingham Palace', 'Tower of London', 'British Museum', 'Westminster Abbey'],
-  manchester: ['John Rylands Library', 'Science and Industry Museum', 'Northern Quarter', 'Old Trafford'],
-  liverpool: ['Royal Albert Dock', 'The Beatles Story', 'Liverpool Cathedral', 'Walker Art Gallery'],
-  edinburgh: ['Edinburgh Castle', 'Royal Mile', "Arthur's Seat", 'Palace of Holyroodhouse'],
-  rome: ['Colosseum', 'Vatican Museums', 'Trevi Fountain', 'Pantheon'],
-  milan: ['Duomo di Milano', 'Galleria Vittorio Emanuele II', 'Sforza Castle', 'Navigli'],
-  venice: ["St Mark's Basilica", "Doge's Palace", 'Grand Canal', 'Rialto Bridge'],
-  florence: ['Uffizi Gallery', 'Florence Cathedral', 'Ponte Vecchio', 'Piazzale Michelangelo'],
-  madrid: ['Prado Museum', 'Royal Palace of Madrid', 'Plaza Mayor', 'Retiro Park'],
-  barcelona: ['Sagrada Familia', 'Park Guell', 'Gothic Quarter', 'Casa Batllo'],
-  valencia: ['City of Arts and Sciences', 'Valencia Cathedral', 'Central Market', 'Turia Gardens'],
-  seville: ['Real Alcazar', 'Seville Cathedral', 'Plaza de Espana', 'Metropol Parasol'],
-  berlin: ['Brandenburg Gate', 'Museum Island', 'Reichstag Building', 'East Side Gallery'],
-  munich: ['Marienplatz', 'Nymphenburg Palace', 'English Garden', 'Deutsches Museum'],
-  frankfurt: ['Romerberg', 'Stadel Museum', 'Palmengarten', 'Main Tower'],
-  hamburg: ['Miniatur Wunderland', 'Elbphilharmonie', 'Speicherstadt', 'Port of Hamburg'],
-  toronto: ['CN Tower', 'Royal Ontario Museum', 'Distillery District', 'St. Lawrence Market'],
-  montreal: ['Old Montreal', 'Notre-Dame Basilica', 'Mount Royal', 'Jean-Talon Market'],
-  vancouver: ['Stanley Park', 'Granville Island', 'Capilano Suspension Bridge', 'Gastown'],
-  calgary: ['Calgary Tower', 'Heritage Park', "Prince's Island Park", 'Glenbow Museum'],
-  sydney: ['Sydney Opera House', 'Harbour Bridge', 'The Rocks', 'Bondi Beach'],
-  melbourne: ['Federation Square', 'Royal Botanic Gardens', 'Queen Victoria Market', 'Hosier Lane'],
-  brisbane: ['South Bank Parklands', 'Lone Pine Koala Sanctuary', 'Story Bridge', 'City Botanic Gardens'],
-  perth: ['Kings Park', 'Fremantle Markets', 'Cottesloe Beach', 'Elizabeth Quay']
+  beijing: ['Forbidden City', 'Temple of Heaven', 'Summer Palace', 'Mutianyu Great Wall', 'Tiananmen Square', 'Jingshan Park', 'Beihai Park'],
+  shanghai: ['The Bund', 'Yu Garden', 'Shanghai Tower', 'Nanjing Road', 'Jade Buddha Temple', 'Xintiandi', 'Tianzifang'],
+  shenzhen: ['Window of the World', 'OCT Loft', 'Dameisha Beach', 'Ping An Finance Centre', 'Lianhuashan Park', 'Splendid China Folk Village', 'Shenzhen Bay Park'],
+  guangzhou: ['Canton Tower', 'Shamian Island', 'Chen Clan Ancestral Hall', 'Yuexiu Park', 'Beijing Road', 'Sun Yat-sen Memorial Hall', 'Pearl River Night Cruise'],
+  paris: ['Eiffel Tower', 'Louvre Museum', 'Notre-Dame Cathedral', 'Montmartre', "Musee d'Orsay", 'Arc de Triomphe', 'Luxembourg Gardens', 'Sainte-Chapelle', 'Palace of Versailles', 'Gardens of Versailles', 'Claude Monet House', 'Disneyland Paris'],
+  lyon: ['Basilica of Notre-Dame de Fourviere', 'Vieux Lyon', "Parc de la Tete d'Or", 'Place Bellecour', 'Les Halles de Lyon Paul Bocuse', 'Musee des Confluences', 'Traboules of Lyon'],
+  marseille: ['Old Port', 'Notre-Dame de la Garde', 'Le Panier', 'Mucem', 'Calanques National Park', 'Palais Longchamp', 'La Corniche'],
+  nice: ['Promenade des Anglais', 'Castle Hill', 'Old Nice', 'Marc Chagall National Museum', 'Cours Saleya Market', 'Place Massena', 'Matisse Museum'],
+  tokyo: ['Senso-ji Temple', 'Shibuya Crossing', 'Tokyo Skytree', 'Meiji Jingu', 'Tsukiji Outer Market', 'Tokyo Tower', 'Ueno Park', 'teamLab Planets'],
+  osaka: ['Dotonbori', 'Osaka Castle', 'Shinsekai', 'Umeda Sky Building', 'Kuromon Market', 'Sumiyoshi Taisha', 'Abeno Harukas'],
+  kyoto: ['Fushimi Inari Taisha', 'Kiyomizu-dera', 'Arashiyama Bamboo Grove', 'Kinkaku-ji', 'Gion', 'Nijo Castle', 'Philosophers Path'],
+  yokohama: ['Minato Mirai', 'Sankeien Garden', 'Yokohama Chinatown', 'Cup Noodles Museum', 'Yamashita Park', 'Red Brick Warehouse', 'Landmark Tower'],
+  'new york': ['Statue of Liberty', 'Central Park', 'Times Square', 'Metropolitan Museum of Art', 'Brooklyn Bridge', 'High Line', 'Grand Central Terminal', 'Top of the Rock'],
+  'los angeles': ['Griffith Observatory', 'Santa Monica Pier', 'Getty Center', 'Hollywood Walk of Fame', 'The Broad', 'Venice Beach', 'Runyon Canyon', 'LACMA'],
+  chicago: ['Millennium Park', 'Art Institute of Chicago', 'Navy Pier', 'Willis Tower Skydeck', 'Riverwalk', 'Cloud Gate', 'Field Museum', 'Magnificent Mile'],
+  'san francisco': ['Golden Gate Bridge', 'Alcatraz Island', "Fisherman's Wharf", 'Palace of Fine Arts', 'Golden Gate Park', 'Chinatown', 'Lombard Street', 'Coit Tower'],
+  london: ['Buckingham Palace', 'Tower of London', 'British Museum', 'Westminster Abbey', 'St Pauls Cathedral', 'Camden Market', 'Covent Garden', 'Tate Modern'],
+  manchester: ['John Rylands Library', 'Science and Industry Museum', 'Northern Quarter', 'Old Trafford', 'Manchester Cathedral', 'Castlefield', 'National Football Museum'],
+  liverpool: ['Royal Albert Dock', 'The Beatles Story', 'Liverpool Cathedral', 'Walker Art Gallery', 'Cavern Club', 'Merseyside Maritime Museum', 'Pier Head'],
+  edinburgh: ['Edinburgh Castle', 'Royal Mile', "Arthur's Seat", 'Palace of Holyroodhouse', 'Calton Hill', 'Dean Village', 'National Museum of Scotland'],
+  rome: ['Colosseum', 'Vatican Museums', 'Trevi Fountain', 'Pantheon', 'Roman Forum', 'Piazza Navona', 'Spanish Steps', 'Castel SantAngelo'],
+  milan: ['Duomo di Milano', 'Galleria Vittorio Emanuele II', 'Sforza Castle', 'Navigli', 'Brera', 'The Last Supper', 'Porta Nuova'],
+  venice: ["St Mark's Basilica", "Doge's Palace", 'Grand Canal', 'Rialto Bridge', 'Burano', 'Murano', 'Peggy Guggenheim Collection'],
+  florence: ['Uffizi Gallery', 'Florence Cathedral', 'Ponte Vecchio', 'Piazzale Michelangelo', 'Accademia Gallery', 'Palazzo Pitti', 'Boboli Gardens'],
+  madrid: ['Prado Museum', 'Royal Palace of Madrid', 'Plaza Mayor', 'Retiro Park', 'Mercado de San Miguel', 'Reina Sofia Museum', 'Gran Via'],
+  barcelona: ['Sagrada Familia', 'Park Guell', 'Gothic Quarter', 'Casa Batllo', 'La Rambla', 'Palau Guell', 'Barceloneta Beach', 'Montjuic'],
+  valencia: ['City of Arts and Sciences', 'Valencia Cathedral', 'Central Market', 'Turia Gardens', 'Lonja de la Seda', 'Malvarrosa Beach', 'Bioparc Valencia'],
+  seville: ['Real Alcazar', 'Seville Cathedral', 'Plaza de Espana', 'Metropol Parasol', 'Triana', 'Archivo de Indias', 'Maria Luisa Park'],
+  berlin: ['Brandenburg Gate', 'Museum Island', 'Reichstag Building', 'East Side Gallery', 'Berlin Cathedral', 'Checkpoint Charlie', 'Tiergarten', 'Charlottenburg Palace'],
+  munich: ['Marienplatz', 'Nymphenburg Palace', 'English Garden', 'Deutsches Museum', 'Viktualienmarkt', 'Residenz Munich', 'Olympic Park'],
+  frankfurt: ['Romerberg', 'Stadel Museum', 'Palmengarten', 'Main Tower', 'Frankfurt Cathedral', 'Museumsufer', 'Goethe House'],
+  hamburg: ['Miniatur Wunderland', 'Elbphilharmonie', 'Speicherstadt', 'Port of Hamburg', 'St Michaelis Church', 'Planten un Blomen', 'Jungfernstieg'],
+  toronto: ['CN Tower', 'Royal Ontario Museum', 'Distillery District', 'St. Lawrence Market', 'Toronto Islands', 'Art Gallery of Ontario', 'Casa Loma'],
+  montreal: ['Old Montreal', 'Notre-Dame Basilica', 'Mount Royal', 'Jean-Talon Market', 'Montreal Museum of Fine Arts', 'Old Port of Montreal', 'Plateau Mont-Royal'],
+  vancouver: ['Stanley Park', 'Granville Island', 'Capilano Suspension Bridge', 'Gastown', 'Vancouver Lookout', 'VanDusen Botanical Garden', 'Canada Place'],
+  calgary: ['Calgary Tower', 'Heritage Park', "Prince's Island Park", 'Glenbow Museum', 'Calgary Zoo', 'Stephen Avenue', 'Peace Bridge'],
+  sydney: ['Sydney Opera House', 'Harbour Bridge', 'The Rocks', 'Bondi Beach', 'Darling Harbour', 'Royal Botanic Garden Sydney', 'Manly Beach'],
+  melbourne: ['Federation Square', 'Royal Botanic Gardens', 'Queen Victoria Market', 'Hosier Lane', 'National Gallery of Victoria', 'St Kilda Beach', 'Southbank Promenade'],
+  brisbane: ['South Bank Parklands', 'Lone Pine Koala Sanctuary', 'Story Bridge', 'City Botanic Gardens', 'Queensland Art Gallery', 'Mount Coot-tha Lookout', 'Roma Street Parkland'],
+  perth: ['Kings Park', 'Fremantle Markets', 'Cottesloe Beach', 'Elizabeth Quay', 'Perth Mint', 'Swan River', 'Art Gallery of Western Australia']
+}
+
+const cityNearbyDayTripsByName: Record<string, string[]> = {
+  beijing: ['Badaling Great Wall', 'Universal Beijing Resort'],
+  shanghai: ['Zhujiajiao Water Town', 'Suzhou Classical Gardens'],
+  shenzhen: ['Nantou Ancient Town', 'Dapeng Fortress'],
+  guangzhou: ['Chimelong Safari Park', 'Kaiping Diaolou'],
+  lyon: ['Annecy Old Town', 'Perouges'],
+  marseille: ['Aix-en-Provence Old Town', 'Cassis Harbour'],
+  nice: ['Monaco Old Town', 'Eze Village'],
+  tokyo: ['Nikko Toshogu Shrine', 'Hakone Open-Air Museum'],
+  osaka: ['Nara Park', 'Himeji Castle'],
+  kyoto: ['Uji Byodo-in', 'Amanohashidate'],
+  yokohama: ['Kamakura Great Buddha', 'Enoshima'],
+  'new york': ['Coney Island', 'Storm King Art Center'],
+  'los angeles': ['Malibu Pier', 'Disneyland Resort'],
+  chicago: ['Indiana Dunes', 'Frank Lloyd Wright Home and Studio'],
+  'san francisco': ['Muir Woods', 'Napa Valley'],
+  london: ['Windsor Castle', 'Hampton Court Palace'],
+  manchester: ['Chatsworth House', 'Chester Cathedral'],
+  liverpool: ['Port Sunlight Village', 'Chester Cathedral'],
+  edinburgh: ['Rosslyn Chapel', 'Stirling Castle'],
+  rome: ['Villa dEste', 'Ostia Antica'],
+  milan: ['Lake Como Bellagio', 'Bergamo Citta Alta'],
+  venice: ['Verona Arena', 'Treviso Historic Center'],
+  florence: ['Leaning Tower of Pisa', 'Siena Piazza del Campo'],
+  madrid: ['Toledo Cathedral', 'Segovia Alcazar'],
+  barcelona: ['Montserrat Monastery', 'Girona Old Town'],
+  valencia: ['Albufera Natural Park', 'Xativa Castle'],
+  seville: ['Cordoba Mezquita', 'Jerez Alcazar'],
+  berlin: ['Sanssouci Palace', 'Dresden Old Town'],
+  munich: ['Neuschwanstein Castle', 'Dachau Memorial Site'],
+  frankfurt: ['Heidelberg Castle', 'Rudesheim am Rhein'],
+  hamburg: ['Lubeck Old Town', 'Schwerin Castle'],
+  toronto: ['Niagara Falls', 'Blue Mountain Village'],
+  montreal: ['Quebec City Old Town', 'Mont-Tremblant Village'],
+  vancouver: ['Whistler Village', 'Victoria Inner Harbour'],
+  calgary: ['Banff Town', 'Lake Louise'],
+  sydney: ['Blue Mountains Three Sisters', 'Hunter Valley'],
+  melbourne: ['Great Ocean Road', 'Phillip Island Penguin Parade'],
+  brisbane: ['Gold Coast Surfers Paradise', 'Australia Zoo'],
+  perth: ['Rottnest Island', 'Swan Valley']
 }
 
 const cityMealsByName: Record<string, MealOption[]> = {
@@ -285,6 +337,10 @@ const attractionPriceByName: Record<string, number> = {
   'Louvre Museum': 22,
   'Notre-Dame Cathedral': 0,
   Montmartre: 0,
+  'Palace of Versailles': 21,
+  'Gardens of Versailles': 10,
+  'Claude Monet House': 11,
+  'Disneyland Paris': 65,
   'Basilica of Notre-Dame de Fourviere': 0,
   'Vieux Lyon': 0,
   "Parc de la Tete d'Or": 0,
@@ -427,6 +483,303 @@ const attractionPriceByName: Record<string, number> = {
   'Elizabeth Quay': 0
 }
 
+const visitSiteMetadataByName: Record<string, VisitSiteMetadata> = {
+  'Forbidden City': { durationMinutes: 210, areaGroup: 'beijing-central' },
+  'Temple of Heaven': { durationMinutes: 120, areaGroup: 'beijing-central' },
+  'Summer Palace': { durationMinutes: 180, areaGroup: 'beijing-west' },
+  'Mutianyu Great Wall': { durationMinutes: 240, areaGroup: 'beijing-outskirts' },
+  'Tiananmen Square': { durationMinutes: 45, areaGroup: 'beijing-central' },
+  'Jingshan Park': { durationMinutes: 75, areaGroup: 'beijing-central' },
+  'Beihai Park': { durationMinutes: 105, areaGroup: 'beijing-central' },
+  'The Bund': { durationMinutes: 75, areaGroup: 'shanghai-bund' },
+  'Yu Garden': { durationMinutes: 90, areaGroup: 'shanghai-bund' },
+  'Shanghai Tower': { durationMinutes: 120, areaGroup: 'shanghai-lujiazui' },
+  'Nanjing Road': { durationMinutes: 75, areaGroup: 'shanghai-bund' },
+  'Jade Buddha Temple': { durationMinutes: 75, areaGroup: 'shanghai-center' },
+  Xintiandi: { durationMinutes: 75, areaGroup: 'shanghai-center' },
+  Tianzifang: { durationMinutes: 75, areaGroup: 'shanghai-center' },
+  'Window of the World': { durationMinutes: 180, areaGroup: 'shenzhen-west' },
+  'OCT Loft': { durationMinutes: 75, areaGroup: 'shenzhen-west' },
+  'Dameisha Beach': { durationMinutes: 120, areaGroup: 'shenzhen-east' },
+  'Ping An Finance Centre': { durationMinutes: 75, areaGroup: 'shenzhen-futian' },
+  'Lianhuashan Park': { durationMinutes: 75, areaGroup: 'shenzhen-futian' },
+  'Splendid China Folk Village': { durationMinutes: 180, areaGroup: 'shenzhen-west' },
+  'Shenzhen Bay Park': { durationMinutes: 75, areaGroup: 'shenzhen-bay' },
+  'Canton Tower': { durationMinutes: 90, areaGroup: 'guangzhou-river' },
+  'Shamian Island': { durationMinutes: 75, areaGroup: 'guangzhou-river' },
+  'Chen Clan Ancestral Hall': { durationMinutes: 75, areaGroup: 'guangzhou-old-town' },
+  'Yuexiu Park': { durationMinutes: 90, areaGroup: 'guangzhou-center' },
+  'Beijing Road': { durationMinutes: 60, areaGroup: 'guangzhou-center' },
+  'Sun Yat-sen Memorial Hall': { durationMinutes: 60, areaGroup: 'guangzhou-center' },
+  'Pearl River Night Cruise': { durationMinutes: 90, areaGroup: 'guangzhou-river' },
+  'Eiffel Tower': { durationMinutes: 150, areaGroup: 'paris-left-bank' },
+  'Louvre Museum': { durationMinutes: 90, areaGroup: 'paris-center' },
+  'Notre-Dame Cathedral': { durationMinutes: 75, areaGroup: 'paris-center' },
+  Montmartre: { durationMinutes: 105, areaGroup: 'paris-north' },
+  "Musee d'Orsay": { durationMinutes: 90, areaGroup: 'paris-left-bank' },
+  'Arc de Triomphe': { durationMinutes: 45, areaGroup: 'paris-west' },
+  'Luxembourg Gardens': { durationMinutes: 75, areaGroup: 'paris-left-bank' },
+  'Sainte-Chapelle': { durationMinutes: 60, areaGroup: 'paris-center' },
+  'Palace of Versailles': { durationMinutes: 180, areaGroup: 'paris-daytrip-versailles' },
+  'Gardens of Versailles': { durationMinutes: 120, areaGroup: 'paris-daytrip-versailles' },
+  'Claude Monet House': { durationMinutes: 120, areaGroup: 'paris-daytrip-giverny' },
+  'Disneyland Paris': { durationMinutes: 240, areaGroup: 'paris-daytrip-disney' },
+  'Basilica of Notre-Dame de Fourviere': { durationMinutes: 75, areaGroup: 'lyon-old-town' },
+  'Vieux Lyon': { durationMinutes: 90, areaGroup: 'lyon-old-town' },
+  "Parc de la Tete d'Or": { durationMinutes: 105, areaGroup: 'lyon-park' },
+  'Place Bellecour': { durationMinutes: 45, areaGroup: 'lyon-center' },
+  'Les Halles de Lyon Paul Bocuse': { durationMinutes: 75, areaGroup: 'lyon-center' },
+  'Musee des Confluences': { durationMinutes: 120, areaGroup: 'lyon-confluence' },
+  'Traboules of Lyon': { durationMinutes: 75, areaGroup: 'lyon-old-town' },
+  'Old Port': { durationMinutes: 60, areaGroup: 'marseille-port' },
+  'Notre-Dame de la Garde': { durationMinutes: 90, areaGroup: 'marseille-hill' },
+  'Le Panier': { durationMinutes: 75, areaGroup: 'marseille-port' },
+  Mucem: { durationMinutes: 120, areaGroup: 'marseille-port' },
+  'Calanques National Park': { durationMinutes: 210, areaGroup: 'marseille-calanques' },
+  'Palais Longchamp': { durationMinutes: 75, areaGroup: 'marseille-center' },
+  'La Corniche': { durationMinutes: 60, areaGroup: 'marseille-coast' },
+  'Promenade des Anglais': { durationMinutes: 75, areaGroup: 'nice-coast' },
+  'Castle Hill': { durationMinutes: 90, areaGroup: 'nice-old-town' },
+  'Old Nice': { durationMinutes: 75, areaGroup: 'nice-old-town' },
+  'Marc Chagall National Museum': { durationMinutes: 105, areaGroup: 'nice-center' },
+  'Cours Saleya Market': { durationMinutes: 60, areaGroup: 'nice-old-town' },
+  'Place Massena': { durationMinutes: 45, areaGroup: 'nice-center' },
+  'Matisse Museum': { durationMinutes: 90, areaGroup: 'nice-center' },
+  'Senso-ji Temple': { durationMinutes: 90, areaGroup: 'tokyo-asakusa' },
+  'Shibuya Crossing': { durationMinutes: 45, areaGroup: 'tokyo-shibuya' },
+  'Tokyo Skytree': { durationMinutes: 105, areaGroup: 'tokyo-sumida' },
+  'Meiji Jingu': { durationMinutes: 90, areaGroup: 'tokyo-shibuya' },
+  'Tsukiji Outer Market': { durationMinutes: 75, areaGroup: 'tokyo-bay' },
+  'Tokyo Tower': { durationMinutes: 75, areaGroup: 'tokyo-minato' },
+  'Ueno Park': { durationMinutes: 90, areaGroup: 'tokyo-ueno' },
+  'teamLab Planets': { durationMinutes: 120, areaGroup: 'tokyo-bay' },
+  Dotonbori: { durationMinutes: 75, areaGroup: 'osaka-namba' },
+  'Osaka Castle': { durationMinutes: 120, areaGroup: 'osaka-castle' },
+  Shinsekai: { durationMinutes: 75, areaGroup: 'osaka-south' },
+  'Umeda Sky Building': { durationMinutes: 75, areaGroup: 'osaka-umeda' },
+  'Kuromon Market': { durationMinutes: 60, areaGroup: 'osaka-namba' },
+  'Sumiyoshi Taisha': { durationMinutes: 75, areaGroup: 'osaka-south' },
+  'Abeno Harukas': { durationMinutes: 75, areaGroup: 'osaka-south' },
+  'Fushimi Inari Taisha': { durationMinutes: 150, areaGroup: 'kyoto-south' },
+  'Kiyomizu-dera': { durationMinutes: 90, areaGroup: 'kyoto-east' },
+  'Arashiyama Bamboo Grove': { durationMinutes: 90, areaGroup: 'kyoto-arashiyama' },
+  'Kinkaku-ji': { durationMinutes: 60, areaGroup: 'kyoto-north' },
+  Gion: { durationMinutes: 75, areaGroup: 'kyoto-east' },
+  'Nijo Castle': { durationMinutes: 90, areaGroup: 'kyoto-center' },
+  'Philosophers Path': { durationMinutes: 75, areaGroup: 'kyoto-east' },
+  'Minato Mirai': { durationMinutes: 75, areaGroup: 'yokohama-bay' },
+  'Sankeien Garden': { durationMinutes: 90, areaGroup: 'yokohama-south' },
+  'Yokohama Chinatown': { durationMinutes: 60, areaGroup: 'yokohama-central' },
+  'Cup Noodles Museum': { durationMinutes: 75, areaGroup: 'yokohama-bay' },
+  'Yamashita Park': { durationMinutes: 60, areaGroup: 'yokohama-central' },
+  'Red Brick Warehouse': { durationMinutes: 60, areaGroup: 'yokohama-bay' },
+  'Landmark Tower': { durationMinutes: 60, areaGroup: 'yokohama-bay' },
+  'Statue of Liberty': { durationMinutes: 150, areaGroup: 'new-york-harbor' },
+  'Central Park': { durationMinutes: 120, areaGroup: 'new-york-midtown' },
+  'Times Square': { durationMinutes: 45, areaGroup: 'new-york-midtown' },
+  'Metropolitan Museum of Art': { durationMinutes: 150, areaGroup: 'new-york-upper-east' },
+  'Brooklyn Bridge': { durationMinutes: 60, areaGroup: 'new-york-downtown' },
+  'High Line': { durationMinutes: 75, areaGroup: 'new-york-west-side' },
+  'Grand Central Terminal': { durationMinutes: 45, areaGroup: 'new-york-midtown' },
+  'Top of the Rock': { durationMinutes: 75, areaGroup: 'new-york-midtown' },
+  'Griffith Observatory': { durationMinutes: 75, areaGroup: 'los-angeles-hollywood' },
+  'Santa Monica Pier': { durationMinutes: 75, areaGroup: 'los-angeles-westside' },
+  'Getty Center': { durationMinutes: 120, areaGroup: 'los-angeles-westside' },
+  'Hollywood Walk of Fame': { durationMinutes: 60, areaGroup: 'los-angeles-hollywood' },
+  'The Broad': { durationMinutes: 90, areaGroup: 'los-angeles-downtown' },
+  'Venice Beach': { durationMinutes: 90, areaGroup: 'los-angeles-westside' },
+  'Runyon Canyon': { durationMinutes: 90, areaGroup: 'los-angeles-hollywood' },
+  LACMA: { durationMinutes: 120, areaGroup: 'los-angeles-miracle-mile' },
+  'Millennium Park': { durationMinutes: 75, areaGroup: 'chicago-loop' },
+  'Art Institute of Chicago': { durationMinutes: 150, areaGroup: 'chicago-loop' },
+  'Navy Pier': { durationMinutes: 90, areaGroup: 'chicago-lakefront' },
+  'Willis Tower Skydeck': { durationMinutes: 75, areaGroup: 'chicago-loop' },
+  Riverwalk: { durationMinutes: 75, areaGroup: 'chicago-loop' },
+  'Cloud Gate': { durationMinutes: 30, areaGroup: 'chicago-loop' },
+  'Field Museum': { durationMinutes: 120, areaGroup: 'chicago-museum-campus' },
+  'Magnificent Mile': { durationMinutes: 60, areaGroup: 'chicago-river-north' },
+  'Golden Gate Bridge': { durationMinutes: 60, areaGroup: 'san-francisco-north' },
+  'Alcatraz Island': { durationMinutes: 180, areaGroup: 'san-francisco-bay' },
+  "Fisherman's Wharf": { durationMinutes: 75, areaGroup: 'san-francisco-waterfront' },
+  'Palace of Fine Arts': { durationMinutes: 45, areaGroup: 'san-francisco-marina' },
+  'Golden Gate Park': { durationMinutes: 120, areaGroup: 'san-francisco-park' },
+  Chinatown: { durationMinutes: 60, areaGroup: 'san-francisco-downtown' },
+  'Lombard Street': { durationMinutes: 30, areaGroup: 'san-francisco-russian-hill' },
+  'Coit Tower': { durationMinutes: 60, areaGroup: 'san-francisco-north-beach' },
+  'Buckingham Palace': { durationMinutes: 60, areaGroup: 'london-westminster' },
+  'Tower of London': { durationMinutes: 150, areaGroup: 'london-city' },
+  'British Museum': { durationMinutes: 150, areaGroup: 'london-bloomsbury' },
+  'Westminster Abbey': { durationMinutes: 75, areaGroup: 'london-westminster' },
+  'St Pauls Cathedral': { durationMinutes: 75, areaGroup: 'london-city' },
+  'Camden Market': { durationMinutes: 75, areaGroup: 'london-camden' },
+  'Covent Garden': { durationMinutes: 60, areaGroup: 'london-west-end' },
+  'Tate Modern': { durationMinutes: 120, areaGroup: 'london-south-bank' },
+  'John Rylands Library': { durationMinutes: 60, areaGroup: 'manchester-center' },
+  'Science and Industry Museum': { durationMinutes: 120, areaGroup: 'manchester-center' },
+  'Northern Quarter': { durationMinutes: 60, areaGroup: 'manchester-center' },
+  'Old Trafford': { durationMinutes: 120, areaGroup: 'manchester-west' },
+  'Manchester Cathedral': { durationMinutes: 45, areaGroup: 'manchester-center' },
+  Castlefield: { durationMinutes: 60, areaGroup: 'manchester-center' },
+  'National Football Museum': { durationMinutes: 90, areaGroup: 'manchester-center' },
+  'Royal Albert Dock': { durationMinutes: 75, areaGroup: 'liverpool-waterfront' },
+  'The Beatles Story': { durationMinutes: 90, areaGroup: 'liverpool-waterfront' },
+  'Liverpool Cathedral': { durationMinutes: 60, areaGroup: 'liverpool-center' },
+  'Walker Art Gallery': { durationMinutes: 90, areaGroup: 'liverpool-center' },
+  'Cavern Club': { durationMinutes: 45, areaGroup: 'liverpool-center' },
+  'Merseyside Maritime Museum': { durationMinutes: 90, areaGroup: 'liverpool-waterfront' },
+  'Pier Head': { durationMinutes: 45, areaGroup: 'liverpool-waterfront' },
+  'Edinburgh Castle': { durationMinutes: 120, areaGroup: 'edinburgh-old-town' },
+  'Royal Mile': { durationMinutes: 75, areaGroup: 'edinburgh-old-town' },
+  "Arthur's Seat": { durationMinutes: 120, areaGroup: 'edinburgh-east' },
+  'Palace of Holyroodhouse': { durationMinutes: 75, areaGroup: 'edinburgh-east' },
+  'Calton Hill': { durationMinutes: 45, areaGroup: 'edinburgh-center' },
+  'Dean Village': { durationMinutes: 45, areaGroup: 'edinburgh-west' },
+  'National Museum of Scotland': { durationMinutes: 120, areaGroup: 'edinburgh-old-town' },
+  Colosseum: { durationMinutes: 120, areaGroup: 'rome-center' },
+  'Vatican Museums': { durationMinutes: 210, areaGroup: 'rome-vatican' },
+  'Trevi Fountain': { durationMinutes: 45, areaGroup: 'rome-center' },
+  Pantheon: { durationMinutes: 60, areaGroup: 'rome-center' },
+  'Roman Forum': { durationMinutes: 120, areaGroup: 'rome-center' },
+  'Piazza Navona': { durationMinutes: 45, areaGroup: 'rome-center' },
+  'Spanish Steps': { durationMinutes: 45, areaGroup: 'rome-center' },
+  'Castel SantAngelo': { durationMinutes: 90, areaGroup: 'rome-vatican' },
+  'Duomo di Milano': { durationMinutes: 90, areaGroup: 'milan-center' },
+  'Galleria Vittorio Emanuele II': { durationMinutes: 45, areaGroup: 'milan-center' },
+  'Sforza Castle': { durationMinutes: 90, areaGroup: 'milan-center' },
+  Navigli: { durationMinutes: 75, areaGroup: 'milan-navigli' },
+  Brera: { durationMinutes: 60, areaGroup: 'milan-center' },
+  'The Last Supper': { durationMinutes: 60, areaGroup: 'milan-west' },
+  'Porta Nuova': { durationMinutes: 60, areaGroup: 'milan-center' },
+  "St Mark's Basilica": { durationMinutes: 75, areaGroup: 'venice-san-marco' },
+  "Doge's Palace": { durationMinutes: 120, areaGroup: 'venice-san-marco' },
+  'Grand Canal': { durationMinutes: 60, areaGroup: 'venice-central' },
+  'Rialto Bridge': { durationMinutes: 30, areaGroup: 'venice-central' },
+  Burano: { durationMinutes: 120, areaGroup: 'venice-islands' },
+  Murano: { durationMinutes: 120, areaGroup: 'venice-islands' },
+  'Peggy Guggenheim Collection': { durationMinutes: 90, areaGroup: 'venice-dorsoduro' },
+  'Uffizi Gallery': { durationMinutes: 150, areaGroup: 'florence-center' },
+  'Florence Cathedral': { durationMinutes: 75, areaGroup: 'florence-center' },
+  'Ponte Vecchio': { durationMinutes: 45, areaGroup: 'florence-center' },
+  'Piazzale Michelangelo': { durationMinutes: 60, areaGroup: 'florence-hill' },
+  'Accademia Gallery': { durationMinutes: 90, areaGroup: 'florence-center' },
+  'Palazzo Pitti': { durationMinutes: 120, areaGroup: 'florence-oltrarno' },
+  'Boboli Gardens': { durationMinutes: 105, areaGroup: 'florence-oltrarno' },
+  'Prado Museum': { durationMinutes: 150, areaGroup: 'madrid-center' },
+  'Royal Palace of Madrid': { durationMinutes: 90, areaGroup: 'madrid-center' },
+  'Plaza Mayor': { durationMinutes: 45, areaGroup: 'madrid-center' },
+  'Retiro Park': { durationMinutes: 90, areaGroup: 'madrid-center' },
+  'Mercado de San Miguel': { durationMinutes: 45, areaGroup: 'madrid-center' },
+  'Reina Sofia Museum': { durationMinutes: 120, areaGroup: 'madrid-center' },
+  'Gran Via': { durationMinutes: 60, areaGroup: 'madrid-center' },
+  'Sagrada Familia': { durationMinutes: 90, areaGroup: 'barcelona-eixample' },
+  'Park Guell': { durationMinutes: 105, areaGroup: 'barcelona-gracia' },
+  'Gothic Quarter': { durationMinutes: 75, areaGroup: 'barcelona-old-town' },
+  'Casa Batllo': { durationMinutes: 75, areaGroup: 'barcelona-eixample' },
+  'La Rambla': { durationMinutes: 60, areaGroup: 'barcelona-old-town' },
+  'Palau Guell': { durationMinutes: 60, areaGroup: 'barcelona-old-town' },
+  'Barceloneta Beach': { durationMinutes: 90, areaGroup: 'barcelona-coast' },
+  Montjuic: { durationMinutes: 105, areaGroup: 'barcelona-montjuic' },
+  'City of Arts and Sciences': { durationMinutes: 150, areaGroup: 'valencia-modern' },
+  'Valencia Cathedral': { durationMinutes: 60, areaGroup: 'valencia-center' },
+  'Central Market': { durationMinutes: 60, areaGroup: 'valencia-center' },
+  'Turia Gardens': { durationMinutes: 90, areaGroup: 'valencia-center' },
+  'Lonja de la Seda': { durationMinutes: 60, areaGroup: 'valencia-center' },
+  'Malvarrosa Beach': { durationMinutes: 90, areaGroup: 'valencia-coast' },
+  'Bioparc Valencia': { durationMinutes: 180, areaGroup: 'valencia-west' },
+  'Real Alcazar': { durationMinutes: 120, areaGroup: 'seville-center' },
+  'Seville Cathedral': { durationMinutes: 90, areaGroup: 'seville-center' },
+  'Plaza de Espana': { durationMinutes: 60, areaGroup: 'seville-park' },
+  'Metropol Parasol': { durationMinutes: 60, areaGroup: 'seville-center' },
+  Triana: { durationMinutes: 75, areaGroup: 'seville-west' },
+  'Archivo de Indias': { durationMinutes: 60, areaGroup: 'seville-center' },
+  'Maria Luisa Park': { durationMinutes: 90, areaGroup: 'seville-park' },
+  'Brandenburg Gate': { durationMinutes: 30, areaGroup: 'berlin-center' },
+  'Museum Island': { durationMinutes: 180, areaGroup: 'berlin-center' },
+  'Reichstag Building': { durationMinutes: 60, areaGroup: 'berlin-center' },
+  'East Side Gallery': { durationMinutes: 60, areaGroup: 'berlin-east' },
+  'Berlin Cathedral': { durationMinutes: 60, areaGroup: 'berlin-center' },
+  'Checkpoint Charlie': { durationMinutes: 30, areaGroup: 'berlin-center' },
+  Tiergarten: { durationMinutes: 90, areaGroup: 'berlin-center' },
+  'Charlottenburg Palace': { durationMinutes: 120, areaGroup: 'berlin-west' },
+  Marienplatz: { durationMinutes: 45, areaGroup: 'munich-center' },
+  'Nymphenburg Palace': { durationMinutes: 120, areaGroup: 'munich-west' },
+  'English Garden': { durationMinutes: 90, areaGroup: 'munich-center' },
+  'Deutsches Museum': { durationMinutes: 150, areaGroup: 'munich-center' },
+  Viktualienmarkt: { durationMinutes: 60, areaGroup: 'munich-center' },
+  'Residenz Munich': { durationMinutes: 120, areaGroup: 'munich-center' },
+  'Olympic Park': { durationMinutes: 90, areaGroup: 'munich-north' },
+  Romerberg: { durationMinutes: 45, areaGroup: 'frankfurt-center' },
+  'Stadel Museum': { durationMinutes: 105, areaGroup: 'frankfurt-river' },
+  Palmengarten: { durationMinutes: 90, areaGroup: 'frankfurt-west' },
+  'Main Tower': { durationMinutes: 60, areaGroup: 'frankfurt-center' },
+  'Frankfurt Cathedral': { durationMinutes: 45, areaGroup: 'frankfurt-center' },
+  Museumsufer: { durationMinutes: 75, areaGroup: 'frankfurt-river' },
+  'Goethe House': { durationMinutes: 60, areaGroup: 'frankfurt-center' },
+  'Miniatur Wunderland': { durationMinutes: 150, areaGroup: 'hamburg-port' },
+  Elbphilharmonie: { durationMinutes: 60, areaGroup: 'hamburg-port' },
+  Speicherstadt: { durationMinutes: 60, areaGroup: 'hamburg-port' },
+  'Port of Hamburg': { durationMinutes: 75, areaGroup: 'hamburg-port' },
+  'St Michaelis Church': { durationMinutes: 45, areaGroup: 'hamburg-center' },
+  'Planten un Blomen': { durationMinutes: 75, areaGroup: 'hamburg-center' },
+  Jungfernstieg: { durationMinutes: 45, areaGroup: 'hamburg-center' },
+  'CN Tower': { durationMinutes: 75, areaGroup: 'toronto-center' },
+  'Royal Ontario Museum': { durationMinutes: 120, areaGroup: 'toronto-midtown' },
+  'Distillery District': { durationMinutes: 60, areaGroup: 'toronto-east' },
+  'St. Lawrence Market': { durationMinutes: 60, areaGroup: 'toronto-center' },
+  'Toronto Islands': { durationMinutes: 180, areaGroup: 'toronto-waterfront' },
+  'Art Gallery of Ontario': { durationMinutes: 120, areaGroup: 'toronto-center' },
+  'Casa Loma': { durationMinutes: 90, areaGroup: 'toronto-midtown' },
+  'Old Montreal': { durationMinutes: 75, areaGroup: 'montreal-old-town' },
+  'Notre-Dame Basilica': { durationMinutes: 60, areaGroup: 'montreal-old-town' },
+  'Mount Royal': { durationMinutes: 105, areaGroup: 'montreal-center' },
+  'Jean-Talon Market': { durationMinutes: 60, areaGroup: 'montreal-north' },
+  'Montreal Museum of Fine Arts': { durationMinutes: 120, areaGroup: 'montreal-center' },
+  'Old Port of Montreal': { durationMinutes: 60, areaGroup: 'montreal-old-town' },
+  'Plateau Mont-Royal': { durationMinutes: 75, areaGroup: 'montreal-center' },
+  'Stanley Park': { durationMinutes: 120, areaGroup: 'vancouver-west' },
+  'Granville Island': { durationMinutes: 75, areaGroup: 'vancouver-center' },
+  'Capilano Suspension Bridge': { durationMinutes: 120, areaGroup: 'vancouver-north' },
+  Gastown: { durationMinutes: 60, areaGroup: 'vancouver-center' },
+  'Vancouver Lookout': { durationMinutes: 45, areaGroup: 'vancouver-center' },
+  'VanDusen Botanical Garden': { durationMinutes: 90, areaGroup: 'vancouver-south' },
+  'Canada Place': { durationMinutes: 45, areaGroup: 'vancouver-center' },
+  'Calgary Tower': { durationMinutes: 60, areaGroup: 'calgary-center' },
+  'Heritage Park': { durationMinutes: 180, areaGroup: 'calgary-south' },
+  "Prince's Island Park": { durationMinutes: 75, areaGroup: 'calgary-center' },
+  'Glenbow Museum': { durationMinutes: 90, areaGroup: 'calgary-center' },
+  'Calgary Zoo': { durationMinutes: 180, areaGroup: 'calgary-east' },
+  'Stephen Avenue': { durationMinutes: 60, areaGroup: 'calgary-center' },
+  'Peace Bridge': { durationMinutes: 30, areaGroup: 'calgary-center' },
+  'Sydney Opera House': { durationMinutes: 90, areaGroup: 'sydney-harbour' },
+  'Harbour Bridge': { durationMinutes: 60, areaGroup: 'sydney-harbour' },
+  'The Rocks': { durationMinutes: 60, areaGroup: 'sydney-harbour' },
+  'Bondi Beach': { durationMinutes: 120, areaGroup: 'sydney-east' },
+  'Darling Harbour': { durationMinutes: 75, areaGroup: 'sydney-center' },
+  'Royal Botanic Garden Sydney': { durationMinutes: 90, areaGroup: 'sydney-harbour' },
+  'Manly Beach': { durationMinutes: 150, areaGroup: 'sydney-north' },
+  'Federation Square': { durationMinutes: 45, areaGroup: 'melbourne-center' },
+  'Royal Botanic Gardens': { durationMinutes: 90, areaGroup: 'melbourne-center' },
+  'Queen Victoria Market': { durationMinutes: 60, areaGroup: 'melbourne-center' },
+  'Hosier Lane': { durationMinutes: 30, areaGroup: 'melbourne-center' },
+  'National Gallery of Victoria': { durationMinutes: 120, areaGroup: 'melbourne-center' },
+  'St Kilda Beach': { durationMinutes: 120, areaGroup: 'melbourne-south' },
+  'Southbank Promenade': { durationMinutes: 60, areaGroup: 'melbourne-center' },
+  'South Bank Parklands': { durationMinutes: 90, areaGroup: 'brisbane-river' },
+  'Lone Pine Koala Sanctuary': { durationMinutes: 180, areaGroup: 'brisbane-southwest' },
+  'Story Bridge': { durationMinutes: 45, areaGroup: 'brisbane-center' },
+  'City Botanic Gardens': { durationMinutes: 75, areaGroup: 'brisbane-center' },
+  'Queensland Art Gallery': { durationMinutes: 90, areaGroup: 'brisbane-river' },
+  'Mount Coot-tha Lookout': { durationMinutes: 60, areaGroup: 'brisbane-west' },
+  'Roma Street Parkland': { durationMinutes: 75, areaGroup: 'brisbane-center' },
+  'Kings Park': { durationMinutes: 120, areaGroup: 'perth-center' },
+  'Fremantle Markets': { durationMinutes: 60, areaGroup: 'perth-fremantle' },
+  'Cottesloe Beach': { durationMinutes: 105, areaGroup: 'perth-coast' },
+  'Elizabeth Quay': { durationMinutes: 45, areaGroup: 'perth-center' },
+  'Perth Mint': { durationMinutes: 60, areaGroup: 'perth-center' },
+  'Swan River': { durationMinutes: 75, areaGroup: 'perth-river' },
+  'Art Gallery of Western Australia': { durationMinutes: 90, areaGroup: 'perth-center' }
+}
+
 export function inferCountryForCity(city: string, fallbackCountry = 'France') {
   return cityCountryByName[city.trim().toLowerCase()] ?? fallbackCountry
 }
@@ -446,18 +799,122 @@ function getSeasonMultiplier(isoDate?: string) {
   return 0.94
 }
 
-function getSelectedVisitHighlights(city: string, visitIndex: number) {
-  const highlights = cityHighlightsByName[city.trim().toLowerCase()]
-  if (!highlights?.length) return []
+function inferVisitDurationMinutes(highlight: string) {
+  const normalized = highlight.toLowerCase()
 
-  const chunkSize = Math.min(3, highlights.length)
-  const startIndex = (visitIndex * chunkSize) % highlights.length
-  return Array.from({ length: chunkSize }, (_, offset) => highlights[(startIndex + offset) % highlights.length])
+  if (normalized.includes('museum') || normalized.includes('gallery') || normalized.includes('musee')) return 105
+  if (normalized.includes('tower') || normalized.includes('skytree') || normalized.includes('observatory')) return 75
+  if (normalized.includes('cathedral') || normalized.includes('basilica') || normalized.includes('abbey') || normalized.includes('temple')) return 60
+  if (normalized.includes('palace') || normalized.includes('castle') || normalized.includes('alcazar') || normalized.includes('museums')) return 120
+  if (normalized.includes('park') || normalized.includes('gardens') || normalized.includes('garden') || normalized.includes('beach')) return 75
+  if (normalized.includes('market') || normalized.includes('quarter') || normalized.includes('old ') || normalized.includes('chinatown')) return 60
+  if (normalized.includes('bridge') || normalized.includes('square') || normalized.includes('fountain') || normalized.includes('gate')) return 45
+
+  return 90
+}
+
+function getVisitDurationMinutes(highlight: string) {
+  return visitSiteMetadataByName[highlight]?.durationMinutes ?? inferVisitDurationMinutes(highlight)
+}
+
+function getVisitAreaGroup(highlight: string) {
+  return visitSiteMetadataByName[highlight]?.areaGroup ?? null
+}
+
+function getCityVisitPool(city: string) {
+  const normalizedCity = city.trim().toLowerCase()
+  const highlights = cityHighlightsByName[normalizedCity] ?? []
+  const nearbyDayTrips = cityNearbyDayTripsByName[normalizedCity] ?? []
+  if (nearbyDayTrips.length === 0) return highlights
+
+  const coreBeforeDayTrip = highlights.slice(0, 4)
+  const remainingHighlights = highlights.slice(4)
+  return [...coreBeforeDayTrip, nearbyDayTrips[0], ...remainingHighlights, ...nearbyDayTrips.slice(1)]
+}
+
+function getVisitTransferMinutesBetween(highlightA: string, highlightB: string) {
+  const groupA = getVisitAreaGroup(highlightA)
+  const groupB = getVisitAreaGroup(highlightB)
+
+  if (!groupA || !groupB) return 25
+  if (groupA === groupB) return 15
+
+  const [cityA, zoneA] = groupA.split('-', 2)
+  const [cityB, zoneB] = groupB.split('-', 2)
+  if (!cityA || !cityB || cityA !== cityB) return 40
+
+  const farZonePattern = /(outskirts|islands|calanques|coast|bay|north|south|east|west|hill|park|harbor|waterfront|river|beach)/i
+  const isFarZoneA = farZonePattern.test(zoneA ?? '')
+  const isFarZoneB = farZonePattern.test(zoneB ?? '')
+
+  if (isFarZoneA || isFarZoneB) return 35
+  return 25
+}
+
+function getSelectedVisitHighlights(city: string, visitIndex: number) {
+  const highlights = getCityVisitPool(city)
+  if (!highlights?.length) return []
+  if (visitIndex >= highlights.length) return []
+
+  const startIndex = visitIndex
+  const primary = highlights[startIndex]
+  const selected = [primary]
+  const nextHighlight = highlights[startIndex + 1]
+
+  if (nextHighlight && nextHighlight !== primary) {
+    const transferMinutes = getVisitTransferMinutesBetween(primary, nextHighlight)
+    const combinedDuration =
+      getVisitDurationMinutes(primary) +
+      getVisitDurationMinutes(nextHighlight) +
+      transferMinutes
+
+    if (
+      transferMinutes <= 25 &&
+      combinedDuration <= 180 &&
+      getVisitDurationMinutes(primary) <= 120 &&
+      getVisitDurationMinutes(nextHighlight) <= 90
+    ) {
+      selected.push(nextHighlight)
+    }
+  }
+
+  return selected
 }
 
 export function getGeneratedVisitName(city: string, visitIndex: number) {
   const selected = getSelectedVisitHighlights(city, visitIndex)
   return selected.length === 0 ? `${city} highlights` : selected.join(', ')
+}
+
+export function getGeneratedVisitTransferInfo(city: string, visitIndex: number): VisitTransferInfo | null {
+  const selected = getSelectedVisitHighlights(city, visitIndex)
+  if (selected.length < 2) return null
+
+  const durationMinutes = getVisitTransferMinutesBetween(selected[0], selected[1])
+  const mode = durationMinutes <= 18 ? 'walk' : durationMinutes <= 30 ? 'local' : 'drive'
+  return {
+    mode,
+    durationMinutes
+  }
+}
+
+export function getGeneratedVisitSiteCount(city: string, visitIndex: number) {
+  return Math.max(1, getSelectedVisitHighlights(city, visitIndex).length)
+}
+
+export function getGeneratedVisitDurationMinutes(city: string, visitIndex: number) {
+  const selected = getSelectedVisitHighlights(city, visitIndex)
+  if (selected.length === 0) return 120
+
+  const totalDuration = selected.reduce((sum, highlight) => sum + getVisitDurationMinutes(highlight), 0)
+  const transferBuffer =
+    selected.length > 1
+      ? selected.slice(1).reduce((sum, highlight, index) => {
+          const previousHighlight = selected[index]
+          return sum + getVisitTransferMinutesBetween(previousHighlight, highlight)
+        }, 0)
+      : 0
+  return Math.max(60, Math.min(240, totalDuration + transferBuffer))
 }
 
 export function getGeneratedVisitCost(city: string, visitIndex: number, travelDate?: string) {
@@ -476,8 +933,8 @@ export function getGeneratedVisitCost(city: string, visitIndex: number, travelDa
     return Math.round(18 * seasonMultiplier * 100) / 100
   }
 
-  const averagePrice = knownPrices.reduce((sum, price) => sum + price, 0) / knownPrices.length
-  return Math.round(averagePrice * seasonMultiplier * 100) / 100
+  const totalPrice = knownPrices.reduce((sum, price) => sum + price, 0)
+  return Math.round(totalPrice * seasonMultiplier * 100) / 100
 }
 
 export function getGeneratedVisitCostDetails(

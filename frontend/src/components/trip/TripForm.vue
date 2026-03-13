@@ -18,7 +18,10 @@ import {
   getGeneratedMealPlan,
   getGeneratedVisitCost,
   getGeneratedVisitCostDetails,
+  getGeneratedVisitDurationMinutes,
   getGeneratedVisitName,
+  getGeneratedVisitSiteCount,
+  getGeneratedVisitTransferInfo,
   isTouristHub
 } from './tripEstimation'
 import type { TransportMode } from './tripEstimation'
@@ -89,7 +92,7 @@ const form = reactive({
   routeStartCity: '',
   routeEndCity: '',
   allowedTransportModes: [...defaultAllowedTransportModes] as TransportMode[],
-  stayPreferences: [] as StayPreference[],
+  stayPreferences: [{ city: '', days: null }] as StayPreference[],
   cityStops: [] as string[][],
   dayActivities: [] as DayActivity[][],
   budget: null as number | null
@@ -134,7 +137,9 @@ const routeCityOptions = computed(() => {
 const selectedCitySet = computed(() => new Set(selectedCityOptions.value))
 const maxStayPreferenceRows = computed(() => {
   const dayCount = Math.max(0, Math.floor(form.numberOfDays ?? 0))
-  return Math.max(1, Math.min(routeCityOptions.value.length, dayCount || 2))
+  const cityLimit = Math.max(1, routeCityOptions.value.length)
+  if (dayCount > 0) return Math.max(1, Math.min(cityLimit, dayCount))
+  return cityLimit
 })
 const canAddStayPreference = computed(
   () => form.stayPreferences.length > 0 && form.stayPreferences.length < maxStayPreferenceRows.value
@@ -223,16 +228,14 @@ watch(
 
     const nextPreferences = preservedPreferences.length > 0
       ? preservedPreferences
-      : cities.length > 0
-        ? [{ city: '', days: null }]
-        : []
+      : [{ city: '', days: null }]
 
     if (nextPreferences.length > maxStayPreferenceRows.value) {
       form.stayPreferences = nextPreferences.slice(0, maxStayPreferenceRows.value)
       return
     }
 
-    if (nextPreferences.length === 0 && cities.length > 0) {
+    if (nextPreferences.length === 0) {
       form.stayPreferences = [{ city: '', days: null }]
       return
     }
@@ -249,7 +252,7 @@ watch(
       form.stayPreferences = form.stayPreferences.slice(0, rowLimit)
     }
 
-    if (form.stayPreferences.length === 0 && routeCityOptions.value.length > 0) {
+    if (form.stayPreferences.length === 0) {
       form.stayPreferences = [{ city: '', days: null }]
     }
   },
@@ -287,7 +290,7 @@ function resetTripDataForCountryChange() {
   form.routeStartCity = ''
   form.routeEndCity = ''
   form.allowedTransportModes = [...defaultAllowedTransportModes]
-  form.stayPreferences = []
+  form.stayPreferences = [{ city: '', days: null }]
   form.cityStops = []
   form.dayActivities = []
   form.budget = null
@@ -439,7 +442,10 @@ function getTripDayCount(startDate: string, endDate: string, details?: TripFormI
 }
 
 function applyInitialData(initialData: TripFormInitialData | null) {
-  if (!initialData) return
+  if (!initialData) {
+    form.stayPreferences = [{ city: '', days: null }]
+    return
+  }
 
   const dayCount = getTripDayCount(initialData.startDate, initialData.endDate, initialData.details)
   skipCountryReset.value = true
@@ -484,10 +490,13 @@ function applyInitialData(initialData: TripFormInitialData | null) {
     if (!targetCity) return
     stayCounts[targetCity] = (stayCounts[targetCity] ?? 0) + 1
   })
-  form.stayPreferences = Object.entries(stayCounts).map(([city, days]) => ({
-    city,
-    days
-  }))
+  const savedStayPreferences = Object.entries(stayCounts)
+    .filter(([, days]) => days > 1)
+    .map(([city, days]) => ({
+      city,
+      days
+    }))
+  form.stayPreferences = savedStayPreferences.length > 0 ? savedStayPreferences : [{ city: '', days: null }]
   skipCountryReset.value = false
 }
 
@@ -586,19 +595,21 @@ async function getOrderedRoute(candidates: CityCandidate[]) {
         .filter((candidate) => !endCandidate || candidate.name.toLowerCase() !== endCandidate.name.toLowerCase() || remaining.length === 1)
         .map(async (candidate) => {
         const distance = await getDistanceBetweenCities(current.name, candidate.name, form.countries)
-        const weightedScore =
-          (distance ?? 5000) + candidate.popularityRank * 160 + candidate.countryOrder * 80
 
           return {
             candidate,
-            distance,
-            weightedScore
+            distance
           }
         })
     )
 
     scored.sort((left, right) => {
-      if (left.weightedScore !== right.weightedScore) return left.weightedScore - right.weightedScore
+      if (left.candidate.popularityRank !== right.candidate.popularityRank) {
+        return left.candidate.popularityRank - right.candidate.popularityRank
+      }
+      if (left.candidate.countryOrder !== right.candidate.countryOrder) {
+        return left.candidate.countryOrder - right.candidate.countryOrder
+      }
       if ((left.distance ?? Number.MAX_SAFE_INTEGER) !== (right.distance ?? Number.MAX_SAFE_INTEGER)) {
         return (left.distance ?? Number.MAX_SAFE_INTEGER) - (right.distance ?? Number.MAX_SAFE_INTEGER)
       }
@@ -671,6 +682,32 @@ function getPreferredStayDaysByCity() {
   return preferredDays
 }
 
+function getExplicitStayDayPlan(dayCount: number) {
+  const plannedDays: string[] = []
+
+  form.stayPreferences.forEach((preference) => {
+    const city = preference.city.trim()
+    if (!city) return
+
+    const days = Math.max(1, Math.floor(preference.days ?? 1))
+    for (let index = 0; index < days && plannedDays.length < dayCount; index += 1) {
+      plannedDays.push(city)
+    }
+  })
+
+  return plannedDays
+}
+
+function buildDayStopsFromPlannedDays(plannedDays: string[], dayCount: number) {
+  return Array.from({ length: dayCount }, (_, dayIndex) => {
+    const currentCity = plannedDays[dayIndex] ?? plannedDays[plannedDays.length - 1] ?? ''
+    if (dayIndex === 0) return [currentCity]
+
+    const previousCity = plannedDays[dayIndex - 1] ?? currentCity
+    return previousCity === currentCity ? [currentCity] : [previousCity, currentCity]
+  })
+}
+
 function buildStayFocusedCityStops(orderedRoute: CityCandidate[], dayCount: number) {
   const routeNames = orderedRoute.map((city) => city.name)
   if (routeNames.length === 0) {
@@ -707,16 +744,15 @@ function buildStayFocusedCityStops(orderedRoute: CityCandidate[], dayCount: numb
     cursor += 1
   }
 
-  return Array.from({ length: dayCount }, (_, dayIndex) => {
-    const currentCity = plannedDays[dayIndex] ?? plannedDays[plannedDays.length - 1] ?? ''
-    if (dayIndex === 0) return [currentCity]
-
-    const previousCity = plannedDays[dayIndex - 1] ?? currentCity
-    return previousCity === currentCity ? [currentCity] : [previousCity, currentCity]
-  })
+  return buildDayStopsFromPlannedDays(plannedDays, dayCount)
 }
 
 async function buildAutoFilledCityStops(orderedRoute: CityCandidate[], dayCount: number) {
+  const explicitStayPlan = getExplicitStayDayPlan(dayCount)
+  if (explicitStayPlan.length >= dayCount) {
+    return buildDayStopsFromPlannedDays(explicitStayPlan, dayCount)
+  }
+
   if (orderedRoute.length === 0) {
     return Array.from({ length: dayCount }, () => [''])
   }
@@ -856,6 +892,21 @@ function addGeneratedActivity(
   return startMinutes + durationMinutes
 }
 
+function formatVisitName(city: string, visitIndex: number) {
+  const name = getGeneratedVisitName(city, visitIndex)
+  const transfer = getGeneratedVisitTransferInfo(city, visitIndex)
+  if (!transfer) return name
+
+  const transportLabel =
+    transfer.mode === 'walk'
+      ? props.texts.transportWalk
+      : transfer.mode === 'local'
+        ? props.texts.transportLocal
+        : props.texts.transportDrive
+
+  return `${name} (${transportLabel} ${transfer.durationMinutes} min)`
+}
+
 function getTransportDurationMinutes(mode: TransportMode, distance: number | null) {
   if (distance === null) {
     if (mode === 'walk') return 25
@@ -914,9 +965,9 @@ async function buildAutoActivities(dayStops: string[][]) {
       currentMinutes = addGeneratedActivity(
         activities,
         currentMinutes,
-        120,
+        getGeneratedVisitDurationMinutes(city, visitIndex),
         'visit',
-        getGeneratedVisitName(city, visitIndex)
+        formatVisitName(city, visitIndex)
       )
       activities[activities.length - 1].cost = getGeneratedVisitCost(city, visitIndex, itineraryDays.value[dayIndex]?.isoDate)
       activities[activities.length - 1].costDetails = getGeneratedVisitCostDetails(
@@ -926,7 +977,7 @@ async function buildAutoActivities(dayStops: string[][]) {
         formatMoney
       )
       activities[activities.length - 1].estimatedCost = true
-      visitCountsByCity[city] = visitIndex + 1
+      visitCountsByCity[city] = visitIndex + getGeneratedVisitSiteCount(city, visitIndex)
 
       currentMinutes += 30
 
@@ -1074,9 +1125,9 @@ async function buildAutoActivities(dayStops: string[][]) {
       addGeneratedActivity(
         activities,
         Math.max(currentMinutes, timeToMinutes('15:30')),
-        120,
+        getGeneratedVisitDurationMinutes(finalCity, visitIndex),
         'visit',
-        getGeneratedVisitName(finalCity, visitIndex)
+        formatVisitName(finalCity, visitIndex)
       )
       activities[activities.length - 1].cost = getGeneratedVisitCost(
         finalCity,
@@ -1090,7 +1141,7 @@ async function buildAutoActivities(dayStops: string[][]) {
         formatMoney
       )
       activities[activities.length - 1].estimatedCost = true
-      visitCountsByCity[finalCity] = visitIndex + 1
+      visitCountsByCity[finalCity] = visitIndex + getGeneratedVisitSiteCount(finalCity, visitIndex)
     }
 
     dayActivities.push(activities)
@@ -1615,16 +1666,16 @@ watch(
                 :max-fraction-digits="0"
                 :placeholder="props.texts.stayDays"
               />
+              <Button
+                v-if="index === form.stayPreferences.length - 1 && canAddStayPreference"
+                type="button"
+                text
+                rounded
+                icon="pi pi-plus"
+                class="add-stay-preference-btn"
+                @click="addStayPreferenceRow"
+              />
             </div>
-            <Button
-              v-if="canAddStayPreference"
-              type="button"
-              text
-              rounded
-              icon="pi pi-plus"
-              class="add-stay-preference-btn"
-              @click="addStayPreferenceRow"
-            />
           </div>
         </div>
 
