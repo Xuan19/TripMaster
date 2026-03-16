@@ -23,6 +23,16 @@ export interface UiTexts {
   transportModes: string
   stayPreferences: string
   stayDays: string
+  accommodation: string
+  accommodationType: string
+  accommodationCheckIn: string
+  accommodationName: string
+  accommodationHotel: string
+  accommodationAirbnb: string
+  accommodationHostel: string
+  accommodationCouchsurfing: string
+  accommodationGuesthouse: string
+  accommodationOther: string
   loadingCities: string
   autoFillCities: string
   addActivity: string
@@ -76,6 +86,16 @@ export type TripFormTexts = Pick<
   | 'transportModes'
   | 'stayPreferences'
   | 'stayDays'
+  | 'accommodation'
+  | 'accommodationType'
+  | 'accommodationCheckIn'
+  | 'accommodationName'
+  | 'accommodationHotel'
+  | 'accommodationAirbnb'
+  | 'accommodationHostel'
+  | 'accommodationCouchsurfing'
+  | 'accommodationGuesthouse'
+  | 'accommodationOther'
   | 'loadingCities'
   | 'autoFillCities'
   | 'addActivity'
@@ -127,6 +147,16 @@ export const translations: Record<Language, UiTexts> = {
     transportModes: 'Transport',
     stayPreferences: 'Stay by city',
     stayDays: 'Days',
+    accommodation: 'Accommodation',
+    accommodationType: 'Type',
+    accommodationCheckIn: 'Check-in',
+    accommodationName: 'Name',
+    accommodationHotel: 'Hotel',
+    accommodationAirbnb: 'Airbnb',
+    accommodationHostel: 'Hostel',
+    accommodationCouchsurfing: 'Couchsurfing',
+    accommodationGuesthouse: 'Guesthouse',
+    accommodationOther: 'Other',
     loadingCities: 'Loading cities...',
     autoFillCities: 'Generate itinerary',
     addActivity: 'Add activity',
@@ -186,6 +216,16 @@ export const translations: Record<Language, UiTexts> = {
     transportModes: 'Transports',
     stayPreferences: 'Sejour par ville',
     stayDays: 'Jours',
+    accommodation: 'Hebergement',
+    accommodationType: 'Type',
+    accommodationCheckIn: 'Check-in',
+    accommodationName: 'Nom',
+    accommodationHotel: 'Hotel',
+    accommodationAirbnb: 'Airbnb',
+    accommodationHostel: 'Auberge',
+    accommodationCouchsurfing: 'Couchsurfing',
+    accommodationGuesthouse: 'Maison d hotes',
+    accommodationOther: 'Autre',
     loadingCities: 'Chargement des villes...',
     autoFillCities: 'Generer l itineraire',
     addActivity: 'Ajouter une activite',
@@ -245,6 +285,16 @@ export const translations: Record<Language, UiTexts> = {
     transportModes: '交通方式',
     stayPreferences: '城市停留',
     stayDays: '天数',
+    accommodation: '住宿',
+    accommodationType: '类型',
+    accommodationCheckIn: '入住时间',
+    accommodationName: '名称',
+    accommodationHotel: '酒店',
+    accommodationAirbnb: 'Airbnb',
+    accommodationHostel: '青年旅舍',
+    accommodationCouchsurfing: '沙发客',
+    accommodationGuesthouse: '民宿',
+    accommodationOther: '其他',
     loadingCities: '正在加载城市...',
     autoFillCities: '生成行程',
     addActivity: '添加活动',

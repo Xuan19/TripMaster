@@ -378,8 +378,8 @@ body {
   min-width: 240px;
   align-self: stretch;
   display: flex;
-  min-height: calc(100vh - 6rem);
-  margin-left: 2rem ;
+  justify-content: center;
+  margin-left: 2rem;
 }
 
 .trip-form {
@@ -399,17 +399,17 @@ body {
 }
 
 .budget-side-card {
-  position: sticky;
-  top: 50vh;
+  position: fixed;
+  top: 50%;
+  right: 2rem;
   transform: translateY(-50%);
-  width: 100%;
+  width: 240px;
+  max-width: calc(100vw - 2rem);
   background: linear-gradient(180deg, var(--tm-surface) 0%, var(--tm-surface-soft) 100%);
   border: 2px solid var(--tm-border-strong);
   border-radius: 14px;
   box-shadow: 0 10px 20px rgba(219, 39, 119, 0.14);
   padding: 0.95rem 1rem;
-  cursor: pointer;
-  align-self: center;
 }
 
 .budget-side-card p {
@@ -705,6 +705,98 @@ body {
   min-width: 0;
   width: 100%;
 }
+
+.accommodation-block {
+  display: grid;
+  gap: 0;
+  margin-top: 0.35rem;
+}
+
+.accommodation-row {
+  display: grid;
+  grid-template-columns:
+    minmax(150px, 1fr)
+    minmax(105px, 0.8fr)
+    minmax(220px, 1.5fr)
+    minmax(130px, 0.9fr);
+  column-gap: 0.8rem;
+  row-gap: 0.35rem;
+  align-items: end;
+}
+
+.accommodation-type-label {
+  font-size: 0.78rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--tm-muted);
+  white-space: nowrap;
+  line-height: 1;
+}
+
+.accommodation-checkin-field {
+  display: grid;
+  grid-template-rows: 14px 2.5rem;
+  gap: 0.2rem;
+  align-items: start;
+  align-self: end;
+}
+
+.accommodation-input-field {
+  display: grid;
+  grid-template-rows: 14px 2.5rem;
+  gap: 0.2rem;
+  align-items: start;
+  align-self: end;
+}
+
+.accommodation-checkin-field small {
+  font-size: 0.72rem;
+  color: var(--tm-muted);
+  line-height: 1;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+}
+
+.accommodation-input-field small {
+  display: block;
+  line-height: 1;
+  visibility: hidden;
+}
+
+.accommodation-input-field .accommodation-type-label {
+  visibility: visible;
+}
+
+.accommodation-checkin-field .p-inputtext {
+  width: 110px;
+  align-self: center;
+}
+
+.accommodation-input-field .p-inputtext,
+.accommodation-input-field .p-dropdown,
+.accommodation-checkin-field .p-inputtext,
+.accommodation-input-field .p-inputnumber .p-inputtext {
+  height: 2.5rem;
+}
+
+.accommodation-type-field {
+  min-width: 0;
+}
+
+.accommodation-top-select.p-dropdown {
+  width: 100%;
+}
+
+.accommodation-cost-field .p-inputnumber {
+  width: 100%;
+}
+
+.accommodation-heading-icon {
+  font-size: 0.78rem;
+}
+
 
 .activities-loader {
   display: flex;
@@ -1044,6 +1136,19 @@ body {
 }
 
 @media (max-width: 1200px) {
+  .accommodation-top-row {
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .accommodation-row {
+    grid-template-columns:
+      minmax(132px, 0.95fr)
+      minmax(96px, 0.8fr)
+      minmax(180px, 1.2fr)
+      minmax(120px, 0.85fr);
+  }
+
   .activity-row {
     grid-template-columns:
       minmax(96px, 1fr)
@@ -1086,6 +1191,10 @@ body {
   }
 
   .activity-row {
+    grid-template-columns: 1fr;
+  }
+
+  .accommodation-row {
     grid-template-columns: 1fr;
   }
 }

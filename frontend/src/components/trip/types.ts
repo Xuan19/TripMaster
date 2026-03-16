@@ -8,10 +8,18 @@ export interface TripDayActivityDetails {
   cost: number
 }
 
+export interface TripDayAccommodationDetails {
+  type?: string
+  checkInTime: string
+  name: string
+  cost?: number
+}
+
 export interface TripDayDetails {
   day: number
   date: string
   cities: string[]
+  accommodation?: TripDayAccommodationDetails
   activities: TripDayActivityDetails[]
 }
 

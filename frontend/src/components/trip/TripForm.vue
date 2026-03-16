@@ -25,7 +25,11 @@ import {
   isTouristHub
 } from './tripEstimation'
 import type { TransportMode } from './tripEstimation'
-import { getAllCountries, getCitiesByCountry, getDistanceBetweenCities } from '../../services/api/geodataApi'
+import {
+  getAllCountries,
+  getCitiesByCountry,
+  getDistanceBetweenCities
+} from '../../services/api/geodataApi'
 import { getTrainJourney } from '../../services/api/transportApi'
 
 interface DayActivity {
@@ -38,6 +42,13 @@ interface DayActivity {
   estimatedCost?: boolean
   estimatedTime?: boolean
   transportMode?: TransportMode | null
+}
+
+interface DayAccommodation {
+  type: string
+  checkInTime: string
+  name: string
+  cost: number | null
 }
 
 interface StayPreference {
@@ -94,6 +105,7 @@ const form = reactive({
   allowedTransportModes: [...defaultAllowedTransportModes] as TransportMode[],
   stayPreferences: [{ city: '', days: null }] as StayPreference[],
   cityStops: [] as string[][],
+  dayAccommodations: [] as DayAccommodation[],
   dayActivities: [] as DayActivity[][],
   budget: null as number | null
 })
@@ -178,6 +190,15 @@ const transportModeOptions = computed(() => [
   { value: 'flight' as TransportMode, label: props.texts.transportFlight }
 ])
 
+const accommodationTypeOptions = computed(() => [
+  { value: 'hotel', label: props.texts.accommodationHotel },
+  { value: 'airbnb', label: props.texts.accommodationAirbnb },
+  { value: 'hostel', label: props.texts.accommodationHostel },
+  { value: 'guesthouse', label: props.texts.accommodationGuesthouse },
+  { value: 'couchsurfing', label: props.texts.accommodationCouchsurfing },
+  { value: 'other', label: props.texts.accommodationOther }
+])
+
 watch(
   () => form.numberOfDays,
   (days) => {
@@ -186,6 +207,7 @@ watch(
       const existing = form.cityStops[index]
       return existing && existing.length ? existing.slice(0, 4) : ['']
     })
+    form.dayAccommodations = Array.from({ length: count }, (_, index) => form.dayAccommodations[index] ?? createEmptyAccommodation())
     form.dayActivities = Array.from({ length: count }, (_, index) => form.dayActivities[index] ?? [])
   }
 )
@@ -292,6 +314,7 @@ function resetTripDataForCountryChange() {
   form.allowedTransportModes = [...defaultAllowedTransportModes]
   form.stayPreferences = [{ city: '', days: null }]
   form.cityStops = []
+  form.dayAccommodations = []
   form.dayActivities = []
   form.budget = null
   expandedDays.value = {}
@@ -393,6 +416,7 @@ const canSubmit = computed(
           activity.cost >= 0
       )
     ) &&
+    form.dayAccommodations.every((accommodation) => accommodation.cost === null || accommodation.cost >= 0) &&
     (form.budget === null || form.budget >= 0)
 )
 
@@ -415,7 +439,11 @@ const totalActivityCost = computed(() =>
     0
   )
 )
-const remainingBudget = computed(() => Number(form.budget ?? 0) - totalActivityCost.value)
+const totalAccommodationCost = computed(() =>
+  form.dayAccommodations.reduce((sum, accommodation) => sum + Number(accommodation.cost ?? 0), 0)
+)
+const totalTripCost = computed(() => totalActivityCost.value + totalAccommodationCost.value)
+const remainingBudget = computed(() => Number(form.budget ?? 0) - totalTripCost.value)
 const budgetSummaryValue = computed(() => (hasBudget.value ? formatMoney(Number(form.budget)) : '-'))
 const remainingBudgetSummaryValue = computed(() => (hasBudget.value ? formatMoney(remainingBudget.value) : '-'))
 
@@ -441,9 +469,19 @@ function getTripDayCount(startDate: string, endDate: string, details?: TripFormI
   return Math.max(1, Math.floor(diffMs / (1000 * 60 * 60 * 24)) + 1)
 }
 
+function createEmptyAccommodation(): DayAccommodation {
+  return {
+    type: '',
+    checkInTime: '',
+    name: '',
+    cost: null
+  }
+}
+
 function applyInitialData(initialData: TripFormInitialData | null) {
   if (!initialData) {
     form.stayPreferences = [{ city: '', days: null }]
+    form.dayAccommodations = []
     return
   }
 
@@ -476,8 +514,19 @@ function applyInitialData(initialData: TripFormInitialData | null) {
         transportMode: null
       }))
     ) ?? []
+  const accommodationsFromDetails =
+    initialData.details?.dayPlans?.map((day) => ({
+      type: day.accommodation?.type ?? '',
+      checkInTime: day.accommodation?.checkInTime ?? '',
+      name: day.accommodation?.name ?? '',
+      cost: day.accommodation?.cost ?? null
+    })) ?? []
 
   form.cityStops = Array.from({ length: dayCount }, (_, index) => cityStopsFromDetails[index] ?? [''])
+  form.dayAccommodations = Array.from(
+    { length: dayCount },
+    (_, index) => accommodationsFromDetails[index] ?? createEmptyAccommodation()
+  )
   form.dayActivities = Array.from({ length: dayCount }, (_, index) => activityFromDetails[index] ?? [])
   form.routeStartCity = cityStopsFromDetails[0]?.[0] ?? ''
   const lastDayCities = cityStopsFromDetails[cityStopsFromDetails.length - 1] ?? []
@@ -1212,27 +1261,19 @@ function syncLinkedDayStartsFrom(dayIndex: number) {
   return Array.from(affectedDays).sort((left, right) => left - right)
 }
 
-async function syncDayBoundariesAndActivities(dayIndex: number) {
-  const affectedDays = new Set<number>([dayIndex])
-
-  syncLinkedDayStartsFrom(dayIndex).forEach((affectedDay) => {
-    affectedDays.add(affectedDay)
-  })
-
-  for (const affectedDay of Array.from(affectedDays).sort((left, right) => left - right)) {
-    await regenerateActivitiesForDay(affectedDay)
-  }
+function syncDayBoundaries(dayIndex: number) {
+  syncLinkedDayStartsFrom(dayIndex)
 }
 
 function removeCityStop(dayIndex: number, cityIndex: number) {
   if (form.cityStops[dayIndex].length <= 1) return
   form.cityStops[dayIndex].splice(cityIndex, 1)
-  void syncDayBoundariesAndActivities(dayIndex)
+  syncDayBoundaries(dayIndex)
 }
 
 function handleCityStopChange(dayIndex: number, cityIndex: number, value: string) {
   form.cityStops[dayIndex][cityIndex] = value
-  void syncDayBoundariesAndActivities(dayIndex)
+  syncDayBoundaries(dayIndex)
 }
 
 function addActivity(dayIndex: number) {
@@ -1253,6 +1294,31 @@ function addActivity(dayIndex: number) {
   })
 
   expandedDays.value[dayIndex] = true
+}
+
+function ensureDayAccommodation(dayIndex: number) {
+  form.dayAccommodations[dayIndex] ??= createEmptyAccommodation()
+  return form.dayAccommodations[dayIndex]
+}
+
+function handleAccommodationCheckInChange(dayIndex: number, value: string) {
+  ensureDayAccommodation(dayIndex).checkInTime = value || ''
+}
+
+function handleAccommodationTypeChange(dayIndex: number, value: string) {
+  ensureDayAccommodation(dayIndex).type = value || ''
+}
+
+function getAccommodationCheckInValue(dayIndex: number) {
+  return form.dayAccommodations[dayIndex]?.checkInTime ?? ''
+}
+
+function handleAccommodationNameChange(dayIndex: number, value: string) {
+  ensureDayAccommodation(dayIndex).name = value || ''
+}
+
+function handleAccommodationCostChange(dayIndex: number, value: number | null) {
+  ensureDayAccommodation(dayIndex).cost = value
 }
 
 function removeActivity(dayIndex: number, activityIndex: number) {
@@ -1364,7 +1430,7 @@ function handleCityDrop(dayIndex: number, targetIndex: number) {
   dayStops.splice(targetIndex, 0, moved)
   form.cityStops[dayIndex] = dayStops
   draggingCity.value = null
-  void syncDayBoundariesAndActivities(dayIndex)
+  syncDayBoundaries(dayIndex)
 }
 
 function handleCityDragEnd() {
@@ -1507,6 +1573,18 @@ function handleSubmit() {
         day: item.day,
         date: item.isoDate,
         cities: form.cityStops[item.index].map((city) => city.trim()).filter((city) => city.length > 0),
+        accommodation: (() => {
+          const accommodation = form.dayAccommodations[item.index] ?? createEmptyAccommodation()
+          const normalized = {
+            type: accommodation.type.trim(),
+            checkInTime: accommodation.checkInTime.trim(),
+            name: accommodation.name.trim(),
+            cost: accommodation.cost === null ? undefined : Number(accommodation.cost)
+          }
+          return normalized.type || normalized.checkInTime || normalized.name || normalized.cost !== undefined
+            ? normalized
+            : undefined
+        })(),
         activities: form.dayActivities[item.index].map((activity) => ({
           startTime: activity.startTime,
           endTime: activity.endTime,
@@ -1767,14 +1845,14 @@ watch(
               v-if="(hasSelectedCity(item.index) || hasActivities(item.index)) && (!hasActivities(item.index) || isDayExpanded(item.index))"
               class="activities-panel"
             >
-              <div v-if="isActivitiesLoading(item.index)" class="activities-loader">
-                <ProgressSpinner style="width: 24px; height: 24px" stroke-width="6" />
-              </div>
-              <div v-else class="activities-section">
-              <div
-                v-for="(activity, activityIndex) in form.dayActivities[item.index]"
-                :key="`${item.index}-activity-${activityIndex}`"
-                class="activity-row"
+	              <div v-if="isActivitiesLoading(item.index)" class="activities-loader">
+	                <ProgressSpinner style="width: 24px; height: 24px" stroke-width="6" />
+	              </div>
+	              <div v-else class="activities-section">
+	              <div
+	                v-for="(activity, activityIndex) in form.dayActivities[item.index]"
+	                :key="`${item.index}-activity-${activityIndex}`"
+	                class="activity-row"
               >
                 <div class="activity-time-field">
                   <small class="activity-time-label">
@@ -1853,10 +1931,57 @@ watch(
                 type="button"
                 outlined
                 class="add-activity-btn"
-                :label="props.texts.addActivity"
-                @click="addActivity(item.index)"
-              />
-              </div>
+	                :label="props.texts.addActivity"
+	                @click="addActivity(item.index)"
+	              />
+		              <div class="accommodation-block">
+		                <div class="accommodation-row">
+		                  <div class="accommodation-input-field accommodation-type-field">
+		                    <small class="accommodation-type-label">
+		                      <i class="pi pi-home accommodation-heading-icon" />
+		                      <span>{{ props.texts.accommodation }}</span>
+		                    </small>
+		                    <Dropdown
+		                      class="accommodation-top-select"
+		                      :model-value="ensureDayAccommodation(item.index).type"
+		                      :options="accommodationTypeOptions"
+		                      option-label="label"
+		                      option-value="value"
+		                      :placeholder="props.texts.accommodationType"
+		                      @update:model-value="handleAccommodationTypeChange(item.index, String($event ?? ''))"
+		                    />
+		                  </div>
+		                  <div class="accommodation-checkin-field">
+		                    <small>{{ props.texts.accommodationCheckIn }}</small>
+		                    <InputText
+		                      :model-value="getAccommodationCheckInValue(item.index)"
+		                      type="time"
+		                      :placeholder="props.texts.accommodationCheckIn"
+		                      @update:model-value="handleAccommodationCheckInChange(item.index, String($event ?? ''))"
+		                    />
+		                  </div>
+		                  <div class="accommodation-input-field">
+		                    <small aria-hidden="true">&nbsp;</small>
+		                    <InputText
+		                      :model-value="ensureDayAccommodation(item.index).name"
+		                      :placeholder="props.texts.accommodationName"
+		                      @update:model-value="handleAccommodationNameChange(item.index, String($event ?? ''))"
+		                    />
+		                  </div>
+		                  <div class="accommodation-input-field accommodation-cost-field">
+		                    <small aria-hidden="true">&nbsp;</small>
+		                    <InputNumber
+		                      :model-value="ensureDayAccommodation(item.index).cost"
+		                      mode="currency"
+		                      :currency="props.currencyCode"
+		                      :min="0"
+		                      :placeholder="props.texts.activityCost"
+		                      @update:model-value="handleAccommodationCostChange(item.index, $event as number | null)"
+		                    />
+		                  </div>
+		                </div>
+		              </div>
+	              </div>
             </div>
           </div>
         </section>
@@ -1871,12 +1996,12 @@ watch(
       </form>
     </div>
 
-    <aside class="trip-summary-sidebar">
-      <div class="budget-side-card">
-      <p><strong>{{ props.texts.budget }}:</strong> {{ budgetSummaryValue }}</p>
-      <p><strong>{{ props.texts.totalCost }}:</strong> {{ formatMoney(totalActivityCost) }}</p>
-      <p><strong>{{ props.texts.remainingBudget }}:</strong> {{ remainingBudgetSummaryValue }}</p>
-      </div>
-    </aside>
+	    <aside class="trip-summary-sidebar">
+	      <div class="budget-side-card">
+	      <p><strong>{{ props.texts.budget }}:</strong> {{ budgetSummaryValue }}</p>
+	      <p><strong>{{ props.texts.totalCost }}:</strong> {{ formatMoney(totalTripCost) }}</p>
+	      <p><strong>{{ props.texts.remainingBudget }}:</strong> {{ remainingBudgetSummaryValue }}</p>
+	      </div>
+	    </aside>
   </div>
 </template>

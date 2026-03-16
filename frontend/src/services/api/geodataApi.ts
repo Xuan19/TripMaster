@@ -1,6 +1,7 @@
 import axios from 'axios'
 
 interface RestCountry {
+  cca2?: string
   name?: {
     common?: string
   }
@@ -16,15 +17,35 @@ const coordinatesCache = new Map<string, { lat: number; lon: number } | null>()
 const distanceCache = new Map<string, number | null>()
 const pendingCoordinatesCache = new Map<string, Promise<{ lat: number; lon: number } | null>>()
 const pendingDistanceCache = new Map<string, Promise<number | null>>()
+let countriesCache: RestCountry[] | null = null
+let pendingCountriesRequest: Promise<RestCountry[]> | null = null
 
 function sortUnique(values: string[]) {
   return Array.from(new Set(values.filter(Boolean))).sort((a, b) => a.localeCompare(b))
 }
 
 export async function getAllCountries(): Promise<string[]> {
-  const { data } = await axios.get<RestCountry[]>('https://restcountries.com/v3.1/all?fields=name')
+  const data = await getCountriesMetadata()
   const countries = data.map((item) => item.name?.common ?? '').filter(Boolean)
   return sortUnique(countries)
+}
+
+async function getCountriesMetadata(): Promise<RestCountry[]> {
+  if (countriesCache) return countriesCache
+  if (pendingCountriesRequest) return pendingCountriesRequest
+
+  pendingCountriesRequest = axios
+    .get<RestCountry[]>('https://restcountries.com/v3.1/all?fields=name,cca2')
+    .then((response) => {
+      countriesCache = response.data ?? []
+      return countriesCache
+    })
+
+  try {
+    return await pendingCountriesRequest
+  } finally {
+    pendingCountriesRequest = null
+  }
 }
 
 export async function getCitiesByCountry(country: string): Promise<string[]> {
