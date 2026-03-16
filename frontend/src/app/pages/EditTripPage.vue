@@ -1,7 +1,6 @@
 ﻿<script setup lang="ts">
 import { computed, inject, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import Button from 'primevue/button'
 import Message from 'primevue/message'
 import TripForm from '../../components/trip/TripForm.vue'
 import type { TripFormInitialData, TripFormSubmitPayload } from '../../components/trip/types'
@@ -80,8 +79,6 @@ void loadTrip()
 
 <template>
   <section class="creator-section edit-page">
-    <Button type="button" text class="edit-page-back" icon="pi pi-arrow-left" :label="texts.back" @click="router.push({ name: 'home' })" />
-
     <Message v-if="loadError" severity="error" :closable="false" class="top-error">
       {{ texts.connectError }}
     </Message>

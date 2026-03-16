@@ -1799,8 +1799,9 @@ watch(
         </div>
 
         <div v-if="form.stayPreferences.length > 0" class="field-group">
-          <label>{{ props.texts.stayPreferences }}</label>
-          <div class="stay-preferences-grid">
+          <div class="stay-preferences-field">
+            <label>{{ props.texts.stayPreferences }}</label>
+            <div class="stay-preferences-grid">
             <div v-for="(preference, index) in form.stayPreferences" :key="`stay-preference-${index}`" class="stay-preference-row">
               <Dropdown
                 v-model="preference.city"
@@ -1827,6 +1828,7 @@ watch(
                 class="add-stay-preference-btn"
                 @click="addStayPreferenceRow"
               />
+            </div>
             </div>
           </div>
         </div>

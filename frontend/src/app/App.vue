@@ -53,6 +53,42 @@ function formatBudget(value: number) {
   }).format(value)
 }
 
+function formatTripPreview(trip: Trip) {
+  const lines = [
+    `${trip.name}`,
+    `${texts.value.country}: ${trip.country}`,
+    `${texts.value.startDate}: ${trip.startDate} -> ${trip.endDate}`,
+    `${texts.value.budgetLabel}: ${formatBudget(Number(trip.budget))}`
+  ]
+
+  const dayPlans = trip.details?.dayPlans ?? []
+  if (!dayPlans.length) {
+    lines.push(texts.value.noTripDetails)
+    return lines.join('\n')
+  }
+
+  dayPlans.forEach((dayPlan) => {
+    const cities = dayPlan.cities.filter(Boolean).join(' -> ')
+    const activities = dayPlan.activities
+      .map((activity) => `${activity.startTime}-${activity.endTime} ${activity.details}`)
+      .join(' | ')
+    const accommodation = dayPlan.accommodation?.name
+      ? ` | ${texts.value.accommodation}: ${dayPlan.accommodation.name}`
+      : ''
+
+    lines.push(`Day ${dayPlan.day} (${dayPlan.date})`)
+    lines.push(`  ${texts.value.savedCities}: ${cities || '-'}`)
+    if (activities) {
+      lines.push(`  ${texts.value.savedActivities}: ${activities}`)
+    }
+    if (accommodation) {
+      lines.push(`  ${accommodation.trim()}`)
+    }
+  })
+
+  return lines.join('\n')
+}
+
 async function loadSidebarTrips() {
   if (!isLoggedIn.value) return
   isSidebarLoading.value = true
@@ -196,29 +232,42 @@ provide(appUiContextKey, {
         <Accordion v-else v-model:activeIndex="activeTripIndex" class="trip-accordion">
           <AccordionTab v-for="trip in trips" :key="trip.id">
             <template #header>
-              <span class="trip-item-title">{{ trip.name }}</span>
+              <div class="trip-header">
+                <span class="trip-item-title">{{ trip.name }}</span>
+              </div>
             </template>
 
             <div class="trip-summary">
               <p><strong>{{ texts.country }}:</strong> {{ trip.country }}</p>
               <p><strong>{{ texts.startDate }}:</strong> {{ trip.startDate }} -> {{ trip.endDate }}</p>
               <p><strong>{{ texts.budgetLabel }}:</strong> {{ formatBudget(Number(trip.budget)) }}</p>
-              <Button
-                type="button"
-                text
-                icon="pi pi-pencil"
-                :label="texts.editTrip"
-                class="sidebar-edit-btn"
-                @click="openTripInEditor(trip.id)"
-              />
-              <Button
-                type="button"
-                text
-                icon="pi pi-trash"
-                :label="texts.deleteTrip"
-                class="sidebar-delete-btn"
-                @click="handleDeleteTrip(trip.id)"
-              />
+              <div class="trip-summary-actions">
+                <Button
+                  type="button"
+                  text
+                  rounded
+                  icon="pi pi-eye"
+                  class="trip-preview-btn"
+                  v-tooltip.left="formatTripPreview(trip)"
+                  :aria-label="texts.tripDetails"
+                />
+                <Button
+                  type="button"
+                  text
+                  rounded
+                  icon="pi pi-pencil"
+                  class="sidebar-edit-btn"
+                  @click.stop="openTripInEditor(trip.id)"
+                />
+                <Button
+                  type="button"
+                  text
+                  rounded
+                  icon="pi pi-trash"
+                  class="sidebar-delete-btn"
+                  @click.stop="handleDeleteTrip(trip.id)"
+                />
+              </div>
             </div>
           </AccordionTab>
         </Accordion>
