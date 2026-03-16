@@ -87,6 +87,8 @@ const segmentDistances = reactive<Record<string, number | null>>({})
 const segmentLoading = reactive<Record<string, boolean>>({})
 const segmentSignatures = reactive<Record<string, string>>({})
 const draggingCity = ref<{ dayIndex: number; cityIndex: number } | null>(null)
+const draggingActivity = ref<{ dayIndex: number; activityIndex: number } | null>(null)
+const activityDropTarget = ref<{ dayIndex: number; activityIndex: number } | null>(null)
 const cityLoaderVisible = ref(false)
 const expandedDays = ref<Record<number, boolean>>({})
 const autoFillingCities = ref(false)
@@ -1326,6 +1328,78 @@ function removeActivity(dayIndex: number, activityIndex: number) {
   syncActivitiesFrom(dayIndex, activityIndex)
 }
 
+function getActivityDurationMinutes(activity: DayActivity) {
+  if (!activity.startTime || !activity.endTime) return 0
+
+  const startMinutes = timeToMinutes(activity.startTime)
+  let endMinutes = timeToMinutes(activity.endTime)
+  if (endMinutes < startMinutes) {
+    endMinutes += 24 * 60
+  }
+
+  return Math.max(0, endMinutes - startMinutes)
+}
+
+function recalculateActivityTimes(dayIndex: number) {
+  const activities = form.dayActivities[dayIndex] ?? []
+  let currentMinutes = timeToMinutes(DEFAULT_ACTIVITY_START_TIME)
+
+  activities.forEach((activity) => {
+    const durationMinutes = getActivityDurationMinutes(activity)
+    activity.startTime = minutesToTime(currentMinutes)
+    activity.endTime = minutesToTime(currentMinutes + durationMinutes)
+    currentMinutes += durationMinutes
+  })
+}
+
+function handleActivityDragStart(event: DragEvent, dayIndex: number, activityIndex: number) {
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', `${dayIndex}-${activityIndex}`)
+  }
+
+  draggingActivity.value = { dayIndex, activityIndex }
+  activityDropTarget.value = null
+}
+
+function handleActivityDragOver(dayIndex: number, activityIndex: number) {
+  if (!draggingActivity.value || draggingActivity.value.dayIndex !== dayIndex) return
+  activityDropTarget.value = { dayIndex, activityIndex }
+}
+
+function handleActivityDrop(dayIndex: number, targetIndex: number) {
+  if (!draggingActivity.value || draggingActivity.value.dayIndex !== dayIndex) return
+
+  const sourceIndex = draggingActivity.value.activityIndex
+  if (sourceIndex === targetIndex) {
+    draggingActivity.value = null
+    activityDropTarget.value = null
+    return
+  }
+
+  const activities = [...(form.dayActivities[dayIndex] ?? [])]
+  const [moved] = activities.splice(sourceIndex, 1)
+  activities.splice(targetIndex, 0, moved)
+  form.dayActivities[dayIndex] = activities
+  recalculateActivityTimes(dayIndex)
+
+  draggingActivity.value = null
+  activityDropTarget.value = null
+}
+
+function handleActivityDragEnd() {
+  draggingActivity.value = null
+  activityDropTarget.value = null
+}
+
+function isActivityDragging(dayIndex: number, activityIndex: number) {
+  return draggingActivity.value?.dayIndex === dayIndex && draggingActivity.value?.activityIndex === activityIndex
+}
+
+function isActivityDropTarget(dayIndex: number, activityIndex: number) {
+  return activityDropTarget.value?.dayIndex === dayIndex && activityDropTarget.value?.activityIndex === activityIndex
+}
+
 function getMinStartTime(dayIndex: number, activityIndex: number) {
   if (activityIndex === 0) return DEFAULT_ACTIVITY_START_TIME
   return form.dayActivities[dayIndex]?.[activityIndex - 1]?.endTime || ''
@@ -1852,8 +1926,26 @@ watch(
 	              <div
 	                v-for="(activity, activityIndex) in form.dayActivities[item.index]"
 	                :key="`${item.index}-activity-${activityIndex}`"
-	                class="activity-row"
+	                :class="[
+	                  'activity-row',
+	                  {
+	                    'activity-row-dragging': isActivityDragging(item.index, activityIndex),
+	                    'activity-row-drop-target': isActivityDropTarget(item.index, activityIndex)
+	                  }
+	                ]"
+	                draggable="true"
+	                @dragstart="handleActivityDragStart($event, item.index, activityIndex)"
+	                @dragover.prevent="handleActivityDragOver(item.index, activityIndex)"
+	                @drop.prevent="handleActivityDrop(item.index, activityIndex)"
+	                @dragend="handleActivityDragEnd"
               >
+	                <Button
+	                  type="button"
+	                  icon="pi pi-bars"
+	                  text
+	                  rounded
+	                  class="drag-activity-btn"
+	                />
                 <div class="activity-time-field">
                   <small class="activity-time-label">
                     <i
