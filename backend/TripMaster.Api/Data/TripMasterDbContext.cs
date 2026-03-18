@@ -19,10 +19,6 @@ public class TripMasterDbContext : DbContext
             .Property(t => t.Budget)
             .HasPrecision(18, 2);
 
-        modelBuilder.Entity<Trip>()
-            .Property(t => t.DetailsJson)
-            .HasColumnType("nvarchar(max)");
-
         modelBuilder.Entity<User>()
             .Property(u => u.Username)
             .HasMaxLength(64);
@@ -37,8 +33,7 @@ public class TripMasterDbContext : DbContext
 
         modelBuilder.Entity<User>()
             .HasIndex(u => u.Email)
-            .IsUnique()
-            .HasFilter("[Email] IS NOT NULL");
+            .IsUnique();
 
         modelBuilder.Entity<Trip>()
             .HasOne(t => t.User)

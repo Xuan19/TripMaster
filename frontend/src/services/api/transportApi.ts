@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { getAuthToken } from './authSession'
+import { apiBaseUrl } from './apiBaseUrl'
 
 export interface TrainJourneyResponse {
   trainReference?: string | null
@@ -13,7 +14,7 @@ export interface TrainJourneyResponse {
 }
 
 const api = axios.create({
-  baseURL: 'https://localhost:7024/api'
+  baseURL: apiBaseUrl
 })
 
 api.interceptors.request.use((config) => {

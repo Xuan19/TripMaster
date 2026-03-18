@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { setAuthSession } from './authSession'
+import { apiBaseUrl } from './apiBaseUrl'
 
 interface AuthResponse {
   token: string
@@ -13,8 +14,7 @@ interface ForgotPasswordResponse {
 }
 
 const authApi = axios.create({
-  // baseURL: 'http://localhost:5024/api'
-  baseURL: 'https://localhost:7024/api'
+  baseURL: apiBaseUrl
 })
 
 export async function register(username: string, email: string, password: string) {

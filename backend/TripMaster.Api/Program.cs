@@ -1,5 +1,7 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using TripMaster.Api.Configuration;
@@ -14,8 +16,18 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+var connectionString = ResolveDatabaseConnectionString(builder.Configuration);
 builder.Services.AddDbContext<TripMasterDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("TripMasterDb")));
+{
+    if (LooksLikePostgresConnectionString(connectionString))
+    {
+        options.UseNpgsql(connectionString);
+    }
+    else
+    {
+        options.UseSqlServer(connectionString);
+    }
+});
 builder.Services.AddScoped<DatabaseInitializer>();
 builder.Services.Configure<TransportRestOptions>(builder.Configuration.GetSection(TransportRestOptions.SectionName));
 builder.Services.AddHttpClient<TransportRestJourneyService>();
@@ -44,11 +56,25 @@ builder.Services
 
 builder.Services.AddAuthorization();
 
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
+
+var allowedOrigins = builder.Configuration
+    .GetSection("Frontend:AllowedOrigins")
+    .Get<string[]>()
+    ?.Where(origin => !string.IsNullOrWhiteSpace(origin))
+    .ToArray()
+    ?? ["http://localhost:5173"];
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("VueApp", policy =>
     {
-        policy.WithOrigins("http://localhost:5173")
+        policy.WithOrigins(allowedOrigins)
             .AllowAnyHeader()
             .AllowAnyMethod();
     });
@@ -68,6 +94,8 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseForwardedHeaders();
+
 if (!app.Environment.IsDevelopment())
 {
     app.UseHttpsRedirection();
@@ -78,3 +106,41 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+
+static string ResolveDatabaseConnectionString(IConfiguration configuration)
+{
+    var databaseUrl = configuration["DATABASE_URL"];
+    if (!string.IsNullOrWhiteSpace(databaseUrl))
+    {
+        return databaseUrl.StartsWith("postgres://", StringComparison.OrdinalIgnoreCase)
+            || databaseUrl.StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase)
+            ? ConvertPostgresUrlToConnectionString(databaseUrl)
+            : databaseUrl;
+    }
+
+    return configuration.GetConnectionString("TripMasterDb")
+        ?? throw new InvalidOperationException("Missing TripMasterDb connection string.");
+}
+
+static bool LooksLikePostgresConnectionString(string connectionString)
+{
+    return connectionString.Contains("Host=", StringComparison.OrdinalIgnoreCase)
+        || connectionString.StartsWith("postgres://", StringComparison.OrdinalIgnoreCase)
+        || connectionString.StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase);
+}
+
+static string ConvertPostgresUrlToConnectionString(string databaseUrl)
+{
+    var uri = new Uri(databaseUrl);
+    var userInfo = uri.UserInfo.Split(':', 2);
+    var username = Uri.UnescapeDataString(userInfo[0]);
+    var password = userInfo.Length > 1 ? Uri.UnescapeDataString(userInfo[1]) : string.Empty;
+    var database = uri.AbsolutePath.Trim('/');
+
+    var query = QueryHelpers.ParseQuery(uri.Query);
+    var sslMode = query.TryGetValue("sslmode", out var configuredSslMode)
+        ? configuredSslMode.ToString()
+        : "Require";
+
+    return $"Host={uri.Host};Port={uri.Port};Database={database};Username={username};Password={password};SSL Mode={sslMode};Trust Server Certificate=true";
+}

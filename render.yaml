@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: tripmaster-api
+    runtime: docker
+    rootDir: backend/TripMaster.Api
+    dockerfilePath: ./Dockerfile
+    autoDeploy: true
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: Frontend__AllowedOrigins__0
+        sync: false
+      - key: Jwt__Key
+        sync: false
+      - key: Jwt__Issuer
+        value: TripMaster.Api
+      - key: Jwt__Audience
+        value: TripMaster.Web
+      - key: DATABASE_URL
+        sync: false
