@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, inject, onMounted, reactive, ref, watch } from 'vue'
 import Button from 'primevue/button'
 import Calendar from 'primevue/calendar'
 import Dropdown from 'primevue/dropdown'
@@ -7,7 +7,8 @@ import InputNumber from 'primevue/inputnumber'
 import InputText from 'primevue/inputtext'
 import MultiSelect from 'primevue/multiselect'
 import ProgressSpinner from 'primevue/progressspinner'
-import type { Currency, TripFormTexts } from '../../locales/i18n'
+import { localeByLanguage, type Currency, type TripFormTexts } from '../../locales/i18n'
+import { appUiContextKey } from '../../app/context'
 import type { ActivityType, TripFormInitialData, TripFormSubmitPayload } from './types'
 import {
   estimateTransportCost,
@@ -28,7 +29,8 @@ import type { TransportMode } from './tripEstimation'
 import {
   getAllCountries,
   getCitiesByCountry,
-  getDistanceBetweenCities
+  getDistanceBetweenCities,
+  localizeCityName
 } from '../../services/api/geodataApi'
 import { getTrainJourney } from '../../services/api/transportApi'
 
@@ -79,6 +81,9 @@ const emit = defineEmits<{
   (e: 'submit', payload: TripFormSubmitPayload): void
 }>()
 
+const appUiContext = inject(appUiContextKey, null)
+const currentLanguage = computed(() => appUiContext?.language.value ?? 'en')
+
 const countryOptions = ref<string[]>([...fallbackCountryOptions])
 const citiesByCountry = reactive<Record<string, string[]>>({ ...fallbackCitiesByCountry })
 const fetchedCountries = reactive<Record<string, boolean>>({})
@@ -112,40 +117,67 @@ const form = reactive({
   budget: null as number | null
 })
 
-const dateFormatter = new Intl.DateTimeFormat('en-GB')
+const dateFormatter = computed(() => new Intl.DateTimeFormat(localeByLanguage[currentLanguage.value]))
 const allCitiesLoaded = computed(
   () => form.countries.length > 0 && form.countries.every((country) => fetchedCountries[country] === true)
 )
 
-const selectedCityOptions = computed(() => {
-  const citySet = new Set<string>()
+function resolveFallbackCountryKey(country: string) {
+  const normalizedCountry = country.trim().toLowerCase()
+  return Object.keys(fallbackCitiesByCountry).find((key) => key.toLowerCase() === normalizedCountry) ?? country
+}
 
-  form.countries.forEach((country) => {
-    const cities = citiesByCountry[country] ?? []
-    cities.forEach((city) => citySet.add(city))
-  })
-
-  return Array.from(citySet).sort((a, b) => a.localeCompare(b))
-})
-
-const routeCityOptions = computed(() => {
-  const orderedCities: string[] = []
+function getMergedCitiesForCountry(country: string) {
+  const fallbackCountryKey = resolveFallbackCountryKey(country)
+  const popularCities = (fallbackCitiesByCountry[fallbackCountryKey] ?? []).map((city) =>
+    localizeCityName(city, currentLanguage.value)
+  )
+  const allCities = citiesByCountry[country] ?? []
+  const mergedCities: string[] = []
   const seen = new Set<string>()
 
-  form.countries.forEach((country) => {
-    const popularCities = fallbackCitiesByCountry[country] ?? []
-    const allCities = citiesByCountry[country] ?? []
-    const mergedCities = [...popularCities, ...allCities]
+  ;[...popularCities, ...allCities].forEach((city) => {
+    const key = city.toLowerCase()
+    if (seen.has(key)) return
+    seen.add(key)
+    mergedCities.push(city)
+  })
 
-    mergedCities.forEach((city) => {
+  return mergedCities
+}
+
+function getOrderedCityOptions(countries: string[]) {
+  const popularCities: string[] = []
+  const otherCities: string[] = []
+  const seen = new Set<string>()
+
+  countries.forEach((country) => {
+    const mergedCities = getMergedCitiesForCountry(country)
+    const popularCityCount = (fallbackCitiesByCountry[resolveFallbackCountryKey(country)] ?? []).length
+
+    mergedCities.forEach((city, index) => {
       const key = city.toLowerCase()
       if (seen.has(key)) return
       seen.add(key)
-      orderedCities.push(city)
+
+      if (index < popularCityCount) {
+        popularCities.push(city)
+        return
+      }
+
+      otherCities.push(city)
     })
   })
 
-  return orderedCities
+  otherCities.sort((a, b) => a.localeCompare(b))
+
+  return [...popularCities, ...otherCities]
+}
+
+const selectedCityOptions = computed(() => getOrderedCityOptions(form.countries))
+
+const routeCityOptions = computed(() => {
+  return getOrderedCityOptions(form.countries)
 })
 
 const selectedCitySet = computed(() => new Set(selectedCityOptions.value))
@@ -171,7 +203,7 @@ const itineraryDays = computed(() => {
       index,
       day: index + 1,
       isoDate: toIsoDate(date),
-      displayDate: dateFormatter.format(date)
+      displayDate: dateFormatter.value.format(date)
     }
   })
 })
@@ -291,6 +323,20 @@ function addStayPreferenceRow() {
   })
 }
 
+function remapCityValue(city: string) {
+  return city ? localizeCityName(city, currentLanguage.value) : ''
+}
+
+function remapFormCities() {
+  form.routeStartCity = remapCityValue(form.routeStartCity)
+  form.routeEndCity = remapCityValue(form.routeEndCity)
+  form.stayPreferences = form.stayPreferences.map((preference) => ({
+    ...preference,
+    city: remapCityValue(preference.city)
+  }))
+  form.cityStops = form.cityStops.map((dayStops) => dayStops.map((city) => remapCityValue(city)))
+}
+
 function hasActiveStayPreferences() {
   return form.stayPreferences.some((preference) => preference.city.trim().length > 0)
 }
@@ -298,7 +344,7 @@ function hasActiveStayPreferences() {
 function pruneCitiesByCountries(countries: string[]) {
   const allowed = new Set<string>()
   countries.forEach((country) => {
-    const cities = citiesByCountry[country] ?? []
+    const cities = getMergedCitiesForCountry(country)
     cities.forEach((city) => allowed.add(city))
   })
 
@@ -360,7 +406,7 @@ watch(
       await Promise.all(
         countriesToFetch.map(async (country) => {
           if (fetchedCountries[country]) return
-          const cities = await getCitiesByCountry(country)
+          const cities = await getCitiesByCountry(country, currentLanguage.value)
           if (cities.length) {
             citiesByCountry[country] = cities
           } else if (!citiesByCountry[country]) {
@@ -378,6 +424,38 @@ watch(
     }
   },
   { immediate: true }
+)
+
+watch(
+  currentLanguage,
+  async (language, previousLanguage) => {
+    if (language === previousLanguage) return
+
+    remapFormCities()
+
+    Object.keys(citiesByCountry).forEach((country) => {
+      citiesByCountry[country] = citiesByCountry[country].map((city) => localizeCityName(city, language))
+    })
+
+    const countriesToRefresh = [...form.countries]
+    if (countriesToRefresh.length === 0) return
+
+    cityLoaderVisible.value = true
+    cityLoading.value = true
+
+    try {
+      await Promise.all(
+        countriesToRefresh.map(async (country) => {
+          fetchedCountries[country] = false
+          citiesByCountry[country] = await getCitiesByCountry(country, language)
+          fetchedCountries[country] = true
+        })
+      )
+    } finally {
+      cityLoading.value = false
+      cityLoaderVisible.value = false
+    }
+  }
 )
 
 watch(
@@ -645,7 +723,7 @@ async function getOrderedRoute(candidates: CityCandidate[]) {
       remaining
         .filter((candidate) => !endCandidate || candidate.name.toLowerCase() !== endCandidate.name.toLowerCase() || remaining.length === 1)
         .map(async (candidate) => {
-        const distance = await getDistanceBetweenCities(current.name, candidate.name, form.countries)
+        const distance = await getDistanceBetweenCities(current.name, candidate.name, form.countries, currentLanguage.value)
 
           return {
             candidate,
@@ -822,7 +900,7 @@ async function buildAutoFilledCityStops(orderedRoute: CityCandidate[], dayCount:
     while (dayCities.length < 4 && routeIndex < orderedRoute.length - 1) {
       const currentRouteCity = orderedRoute[routeIndex]
       const nextCity = orderedRoute[routeIndex + 1]
-      const distance = await getDistanceBetweenCities(currentRouteCity.name, nextCity.name, form.countries)
+      const distance = await getDistanceBetweenCities(currentRouteCity.name, nextCity.name, form.countries, currentLanguage.value)
       const transportMode = getAllowedTransportModeForDistance(distance)
       const remainingDays = dayCount - dayIndex - 1
       const remainingCities = orderedRoute.length - routeIndex - 1
@@ -1052,7 +1130,7 @@ async function buildAutoActivities(dayStops: string[][]) {
 
       if (cityIndex < cities.length - 1) {
         const nextCity = cities[cityIndex + 1]
-        const distance = await getDistanceBetweenCities(city, nextCity, form.countries)
+        const distance = await getDistanceBetweenCities(city, nextCity, form.countries, currentLanguage.value)
         const transportMode = getAllowedTransportModeForDistance(distance)
         let transportStartMinutes = currentMinutes
         let transportEndMinutes = currentMinutes + getTransportDurationMinutes(transportMode, distance)
@@ -1532,12 +1610,12 @@ async function refreshSegmentDistances() {
         continue
       }
 
-      const signature = `${fromCity.toLowerCase()}->${toCity.toLowerCase()}|${countriesKey}`
+      const signature = `${currentLanguage.value}|${fromCity.toLowerCase()}->${toCity.toLowerCase()}|${countriesKey}`
       if (segmentSignatures[key] === signature) continue
 
       segmentSignatures[key] = signature
       segmentLoading[key] = true
-      void getDistanceBetweenCities(fromCity, toCity, form.countries)
+      void getDistanceBetweenCities(fromCity, toCity, form.countries, currentLanguage.value)
         .then((distance) => {
           segmentDistances[key] = distance
         })
