@@ -60,6 +60,7 @@ export interface UiTexts {
   totalCost: string
   remainingBudget: string
   save: string
+  exportWord: string
   upcomingTrips: string
   noTrips: string
   tripDetails: string
@@ -124,6 +125,7 @@ export type TripFormTexts = Pick<
   | 'totalCost'
   | 'remainingBudget'
   | 'save'
+  | 'exportWord'
 >
 
 export const translations: Record<Language, UiTexts> = {
@@ -186,6 +188,7 @@ export const translations: Record<Language, UiTexts> = {
     totalCost: 'Total cost',
     remainingBudget: 'Remaining budget',
     save: 'Save',
+    exportWord: 'Export Word',
     upcomingTrips: 'Upcoming trips',
     noTrips: 'No trips yet.',
     tripDetails: 'Trip details',
@@ -256,6 +259,7 @@ export const translations: Record<Language, UiTexts> = {
     totalCost: 'Cout total',
     remainingBudget: 'Budget restant',
     save: 'Enregistrer',
+    exportWord: 'Exporter Word',
     upcomingTrips: 'Voyages a venir',
     noTrips: 'Aucun voyage pour le moment.',
     tripDetails: 'Details du voyage',
@@ -326,6 +330,7 @@ export const translations: Record<Language, UiTexts> = {
     totalCost: '总花费',
     remainingBudget: '剩余预算',
     save: '保存',
+    exportWord: '导出 Word',
     upcomingTrips: '即将开始的旅行',
     noTrips: '暂无旅行。',
     tripDetails: '旅行详情',

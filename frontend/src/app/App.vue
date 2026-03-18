@@ -35,6 +35,120 @@ const activeTripIndex = ref<number | null>(null)
 const isLoggedIn = ref(isAuthenticated())
 const authUsername = ref(getAuthUsername() ?? '')
 
+function escapeHtml(value: string) {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
+}
+
+function sanitizeFileName(value: string) {
+  const normalized = value.trim().replace(/[<>:"/\\|?*]+/g, '-').replace(/\s+/g, ' ')
+  return normalized.length > 0 ? normalized : 'trip'
+}
+
+function buildTripWordHtml(trip: Trip) {
+  const dayPlans = trip.details?.dayPlans ?? []
+  const daySections = dayPlans.length
+    ? dayPlans
+        .map((dayPlan) => {
+          const cities = dayPlan.cities.filter(Boolean).join(' -> ') || '-'
+          const accommodation = dayPlan.accommodation?.name
+            ? `
+              <p><strong>${escapeHtml(texts.value.accommodation)}:</strong> ${escapeHtml(dayPlan.accommodation.name)}</p>
+              <p><strong>${escapeHtml(texts.value.accommodationCheckIn)}:</strong> ${escapeHtml(dayPlan.accommodation.checkInTime || '-')}</p>
+            `
+            : ''
+          const activities = dayPlan.activities.length
+            ? `
+              <table>
+                <thead>
+                  <tr>
+                    <th>${escapeHtml(texts.value.activityStartTime)}</th>
+                    <th>${escapeHtml(texts.value.activityEndTime)}</th>
+                    <th>${escapeHtml(texts.value.activityType)}</th>
+                    <th>${escapeHtml(texts.value.activityName)}</th>
+                    <th>${escapeHtml(texts.value.activityCost)}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${dayPlan.activities
+                    .map(
+                      (activity) => `
+                        <tr>
+                          <td>${escapeHtml(activity.startTime)}</td>
+                          <td>${escapeHtml(activity.endTime)}</td>
+                          <td>${escapeHtml(activity.type)}</td>
+                          <td>${escapeHtml(activity.details)}</td>
+                          <td>${formatBudget(Number(activity.cost ?? 0))}</td>
+                        </tr>
+                      `
+                    )
+                    .join('')}
+                </tbody>
+              </table>
+            `
+            : `<p>${escapeHtml(texts.value.noTripDetails)}</p>`
+
+          return `
+            <section class="day-section">
+              <h2>${escapeHtml(texts.value.day)} ${dayPlan.day} - ${escapeHtml(dayPlan.date)}</h2>
+              <p><strong>${escapeHtml(texts.value.savedCities)}:</strong> ${escapeHtml(cities)}</p>
+              ${accommodation}
+              ${activities}
+            </section>
+          `
+        })
+        .join('')
+    : `<p>${escapeHtml(texts.value.noTripDetails)}</p>`
+
+  return `
+    <html xmlns:o="urn:schemas-microsoft-com:office:office"
+          xmlns:w="urn:schemas-microsoft-com:office:word"
+          xmlns="http://www.w3.org/TR/REC-html40">
+      <head>
+        <meta charset="utf-8" />
+        <title>${escapeHtml(trip.name)}</title>
+        <style>
+          body { font-family: Calibri, Arial, sans-serif; color: #2d1b24; line-height: 1.45; }
+          h1 { color: #7a103f; margin-bottom: 8px; }
+          h2 { color: #be185d; margin: 20px 0 8px; font-size: 18px; }
+          p { margin: 4px 0; }
+          table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+          th, td { border: 1px solid #e9b7cb; padding: 6px 8px; text-align: left; vertical-align: top; }
+          th { background: #fff1f7; color: #7a103f; }
+          .summary { margin-bottom: 18px; }
+          .day-section { margin-top: 20px; }
+        </style>
+      </head>
+      <body>
+        <h1>${escapeHtml(trip.name)}</h1>
+        <div class="summary">
+          <p><strong>${escapeHtml(texts.value.country)}:</strong> ${escapeHtml(trip.country)}</p>
+          <p><strong>${escapeHtml(texts.value.startDate)}:</strong> ${escapeHtml(trip.startDate)} -> ${escapeHtml(trip.endDate)}</p>
+          <p><strong>${escapeHtml(texts.value.budgetLabel)}:</strong> ${formatBudget(Number(trip.budget))}</p>
+        </div>
+        ${daySections}
+      </body>
+    </html>
+  `
+}
+
+function exportTripToWord(trip: Trip) {
+  const html = buildTripWordHtml(trip)
+  const blob = new Blob([`\ufeff${html}`], { type: 'application/msword;charset=utf-8' })
+  const downloadUrl = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = downloadUrl
+  link.download = `${sanitizeFileName(trip.name)}.doc`
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(downloadUrl)
+}
+
 function goToCreateTrip() {
   if (route.name !== 'home') {
     void router.push({ name: 'home' }).then(() => {
@@ -242,6 +356,15 @@ provide(appUiContextKey, {
               <p><strong>{{ texts.startDate }}:</strong> {{ trip.startDate }} -> {{ trip.endDate }}</p>
               <p><strong>{{ texts.budgetLabel }}:</strong> {{ formatBudget(Number(trip.budget)) }}</p>
               <div class="trip-summary-actions">
+                <Button
+                  type="button"
+                  text
+                  rounded
+                  icon="pi pi-file-word"
+                  class="trip-export-btn"
+                  :aria-label="texts.exportWord"
+                  @click.stop="exportTripToWord(trip)"
+                />
                 <Button
                   type="button"
                   text

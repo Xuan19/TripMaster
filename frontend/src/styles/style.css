@@ -1710,6 +1710,21 @@ body,
   background: #ffe6f1;
 }
 
+.trip-export-btn.p-button {
+  justify-self: auto;
+  align-self: auto;
+  margin-top: 0;
+  width: 1.95rem;
+  min-width: 1.95rem;
+  height: 1.95rem;
+  padding: 0;
+  color: var(--tm-accent-strong);
+}
+
+.trip-export-btn.p-button:enabled:hover {
+  background: #ffe6f1;
+}
+
 .sidebar-edit-btn.p-button {
   justify-self: start;
   margin-top: 0;
