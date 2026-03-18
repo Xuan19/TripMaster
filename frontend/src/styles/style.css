@@ -593,6 +593,12 @@ body {
   opacity: 0.8;
 }
 
+.submit-hint {
+  margin-top: -0.15rem;
+  color: #d97706;
+  font-size: 0.8rem;
+}
+
 .auth-primary-btn.p-button {
   border: none;
   color: #fff7fb;

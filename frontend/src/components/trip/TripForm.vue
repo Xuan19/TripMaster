@@ -61,9 +61,19 @@ interface StayPreference {
   days: number | null
 }
 
+interface GeneratedDayPlan {
+  activities: DayActivity[]
+  finalReachedCity: string
+  reachedCities: string[]
+}
+
 const defaultAllowedTransportModes: TransportMode[] = ['walk', 'local', 'train', 'drive', 'flight']
 
 const DEFAULT_ACTIVITY_START_TIME = '08:00'
+const DEFAULT_AUTO_ACTIVITY_START_TIME = '09:00'
+const DEFAULT_HOTEL_CHECK_IN_TIME = '15:00'
+const LATEST_AUTO_ACTIVITY_START_TIME = '20:30'
+const DEFAULT_DAY_END_TIME = '23:30'
 
 const props = withDefaults(
   defineProps<{
@@ -502,14 +512,53 @@ const canSubmit = computed(
       activities.every(
         (activity, activityIndex) =>
           isValidTimeRange(dayIndex, activityIndex, activity) &&
-          activity.name.trim().length > 0 &&
-          activity.cost !== null &&
-          activity.cost >= 0
+          activity.name.trim().length > 0
       )
-    ) &&
-    form.dayAccommodations.every((accommodation) => accommodation.cost === null || accommodation.cost >= 0) &&
-    (form.budget === null || form.budget >= 0)
+    )
 )
+
+const submitBlockers = computed(() => {
+  const blockers: string[] = []
+
+  if (form.countries.length === 0) blockers.push('Select at least one country.')
+  if (form.startDate === null) blockers.push('Choose a start date.')
+  if (form.numberOfDays === null || form.numberOfDays < 1) blockers.push('Enter at least 1 day.')
+  if (!allCitiesLoaded.value) blockers.push('Wait for cities to finish loading.')
+  if (selectedCityOptions.value.length === 0) blockers.push('No cities are available for the selected country.')
+
+  if (form.numberOfDays !== null && form.numberOfDays >= 1) {
+    if (form.cityStops.length !== Math.floor(form.numberOfDays)) {
+      blockers.push('Generate or fill the city stops for each day.')
+    } else if (
+      !form.cityStops.every((dayStops) => {
+        const selectedCities = dayStops.map((city) => city.trim()).filter((city) => city.length > 0)
+        return selectedCities.length > 0 && selectedCities.every((city) => selectedCitySet.value.has(city))
+      })
+    ) {
+      blockers.push('Each day needs at least one valid city.')
+    }
+  }
+
+  let invalidActivityMessage = ''
+  form.dayActivities.some((activities, dayIndex) =>
+    activities.some((activity, activityIndex) => {
+      if (activity.name.trim().length === 0) {
+        invalidActivityMessage = `Day ${dayIndex + 1}, activity ${activityIndex + 1}: enter a name.`
+        return true
+      }
+
+      if (!isValidTimeRange(dayIndex, activityIndex, activity)) {
+        invalidActivityMessage = `Day ${dayIndex + 1}, activity ${activityIndex + 1}: check the time range.`
+        return true
+      }
+
+      return false
+    })
+  )
+  if (invalidActivityMessage) blockers.push(invalidActivityMessage)
+
+  return blockers
+})
 
 const showCountryError = computed(() => form.countries.length === 0)
 const showCityLoader = computed(() => cityLoaderVisible.value)
@@ -1028,8 +1077,13 @@ function addGeneratedActivity(
   type: ActivityType,
   name: string
 ) {
+  const dayEndMinutes = timeToMinutes(DEFAULT_DAY_END_TIME)
+  if (startMinutes >= dayEndMinutes) {
+    return dayEndMinutes
+  }
+
   const startTime = minutesToTime(startMinutes)
-  const endTime = minutesToTime(startMinutes + durationMinutes)
+  const endTime = minutesToTime(Math.min(startMinutes + durationMinutes, dayEndMinutes))
   activities.push({
     startTime,
     endTime,
@@ -1097,44 +1151,67 @@ function getTransportDurationMinutes(mode: TransportMode, distance: number | nul
 }
 
 async function buildAutoActivities(dayStops: string[][]) {
-  const dayActivities: DayActivity[][] = []
+  const dayPlans: GeneratedDayPlan[] = []
   const visitCountsByCity: Record<string, number> = {}
   const mealCountsByCity: Record<string, number> = {}
 
   for (let dayIndex = 0; dayIndex < dayStops.length; dayIndex += 1) {
     const cities = dayStops[dayIndex].map((city) => city.trim()).filter((city) => city.length > 0)
     const activities: DayActivity[] = []
-    let currentMinutes = timeToMinutes('09:00')
+    let finalReachedCity = cities[0] ?? ''
+    const reachedCities = finalReachedCity ? [finalReachedCity] : []
+    let currentMinutes = timeToMinutes(DEFAULT_AUTO_ACTIVITY_START_TIME)
+    const dayEndMinutes = timeToMinutes(DEFAULT_DAY_END_TIME)
     let mealAdded = false
 
     if (cities.length === 0) {
-      dayActivities.push([])
+      dayPlans.push({
+        activities: [],
+        finalReachedCity: '',
+        reachedCities: []
+      })
       continue
     }
 
     for (let cityIndex = 0; cityIndex < cities.length; cityIndex += 1) {
       const city = cities[cityIndex]
-      const visitIndex = visitCountsByCity[city] ?? 0
-      currentMinutes = addGeneratedActivity(
-        activities,
-        currentMinutes,
-        getGeneratedVisitDurationMinutes(city, visitIndex),
-        'visit',
-        formatVisitName(city, visitIndex)
-      )
-      activities[activities.length - 1].cost = getGeneratedVisitCost(city, visitIndex, itineraryDays.value[dayIndex]?.isoDate)
-      activities[activities.length - 1].costDetails = getGeneratedVisitCostDetails(
-        city,
-        visitIndex,
-        itineraryDays.value[dayIndex]?.isoDate,
-        formatMoney
-      )
-      activities[activities.length - 1].estimatedCost = true
-      visitCountsByCity[city] = visitIndex + getGeneratedVisitSiteCount(city, visitIndex)
+      const previousDayFinalCity =
+        dayIndex > 0
+          ? dayStops[dayIndex - 1]
+              ?.map((previousCity) => previousCity.trim())
+              .filter((previousCity) => previousCity.length > 0)
+              .slice(-1)[0] ?? ''
+          : ''
+      const isCarryOverDepartureCity =
+        dayIndex > 0 &&
+        cityIndex === 0 &&
+        cities.length > 1 &&
+        previousDayFinalCity.length > 0 &&
+        previousDayFinalCity === city
 
-      currentMinutes += 30
+      if (!isCarryOverDepartureCity && currentMinutes < timeToMinutes(LATEST_AUTO_ACTIVITY_START_TIME)) {
+        const visitIndex = visitCountsByCity[city] ?? 0
+        currentMinutes = addGeneratedActivity(
+          activities,
+          currentMinutes,
+          getGeneratedVisitDurationMinutes(city, visitIndex),
+          'visit',
+          formatVisitName(city, visitIndex)
+        )
+        activities[activities.length - 1].cost = getGeneratedVisitCost(city, visitIndex, itineraryDays.value[dayIndex]?.isoDate)
+        activities[activities.length - 1].costDetails = getGeneratedVisitCostDetails(
+          city,
+          visitIndex,
+          itineraryDays.value[dayIndex]?.isoDate,
+          formatMoney
+        )
+        activities[activities.length - 1].estimatedCost = true
+        visitCountsByCity[city] = visitIndex + getGeneratedVisitSiteCount(city, visitIndex)
 
-      if (!mealAdded && currentMinutes >= timeToMinutes('12:00')) {
+        currentMinutes += 30
+      }
+
+      if (!mealAdded && currentMinutes >= timeToMinutes('12:00') && currentMinutes < dayEndMinutes) {
         const mealIndex = mealCountsByCity[city] ?? 0
         const mealPlan = getGeneratedMealPlan(city, mealIndex, form.countries[0])
         currentMinutes = addGeneratedActivity(
@@ -1238,22 +1315,31 @@ async function buildAutoActivities(dayStops: string[][]) {
           }
         }
 
-        activities.push({
-          startTime: minutesToTime(transportStartMinutes),
-          endTime: minutesToTime(Math.max(transportStartMinutes, transportEndMinutes)),
-          type: 'transport',
-          name: transportDetail,
-          cost: transportCost,
-          costDetails: transportCostDetails,
-          estimatedCost: transportMode !== 'walk' && !hasRealTransportPrice,
-          estimatedTime,
-          transportMode
-        })
-        currentMinutes = Math.max(transportStartMinutes, transportEndMinutes) + 30
+        transportStartMinutes = Math.min(transportStartMinutes, dayEndMinutes)
+        transportEndMinutes = Math.min(Math.max(transportStartMinutes, transportEndMinutes), dayEndMinutes)
+
+        if (transportStartMinutes < dayEndMinutes) {
+          activities.push({
+            startTime: minutesToTime(transportStartMinutes),
+            endTime: minutesToTime(transportEndMinutes),
+            type: 'transport',
+            name: transportDetail,
+            cost: transportCost,
+            costDetails: transportCostDetails,
+            estimatedCost: transportMode !== 'walk' && !hasRealTransportPrice,
+            estimatedTime,
+            transportMode
+          })
+          finalReachedCity = nextCity
+          if (!reachedCities.includes(nextCity)) {
+            reachedCities.push(nextCity)
+          }
+        }
+        currentMinutes = Math.min(dayEndMinutes, Math.max(transportStartMinutes, transportEndMinutes) + 30)
       }
     }
 
-    if (!mealAdded) {
+    if (!mealAdded && currentMinutes < dayEndMinutes) {
       const mealCity = cities[cities.length - 1]
       const mealIndex = mealCountsByCity[mealCity] ?? 0
       const mealPlan = getGeneratedMealPlan(mealCity, mealIndex, form.countries[0])
@@ -1273,7 +1359,7 @@ async function buildAutoActivities(dayStops: string[][]) {
 
     const finalCity = cities[cities.length - 1]
     const shouldAddExtraVisit = cities.length === 1 || isTouristHub(finalCity)
-    if (shouldAddExtraVisit && activities.length < 5) {
+    if (shouldAddExtraVisit && activities.length < 5 && currentMinutes < timeToMinutes(LATEST_AUTO_ACTIVITY_START_TIME)) {
       const visitIndex = visitCountsByCity[finalCity] ?? 0
       addGeneratedActivity(
         activities,
@@ -1297,10 +1383,14 @@ async function buildAutoActivities(dayStops: string[][]) {
       visitCountsByCity[finalCity] = visitIndex + getGeneratedVisitSiteCount(finalCity, visitIndex)
     }
 
-    dayActivities.push(activities)
+    dayPlans.push({
+      activities,
+      finalReachedCity,
+      reachedCities
+    })
   }
 
-  return dayActivities
+  return dayPlans
 }
 
 async function buildAutoAccommodations(dayStops: string[]) {
@@ -1317,9 +1407,18 @@ async function buildAutoAccommodations(dayStops: string[]) {
         checkInDate
       )
 
+      const latestTransportArrival = form.dayActivities[dayIndex]
+        ?.filter((activity) => activity.type === 'transport')
+        .map((activity) => timeToMinutes(activity.endTime))
+        .reduce((latest, time) => Math.max(latest, time), 0) ?? 0
+      const checkInMinutes = Math.min(
+        Math.max(timeToMinutes(DEFAULT_HOTEL_CHECK_IN_TIME), latestTransportArrival),
+        timeToMinutes('23:30')
+      )
+
       return {
         type: hotelPlan.type,
-        checkInTime: '15:00',
+        checkInTime: minutesToTime(checkInMinutes),
         name: hotelPlan.name,
         cost: hotelPlan.cost,
         costDetails: getGeneratedHotelCostDetails(
@@ -1335,6 +1434,30 @@ async function buildAutoAccommodations(dayStops: string[]) {
   return accommodations
 }
 
+function normalizeGeneratedCityStops(dayPlans: GeneratedDayPlan[], fallbackStops: string[][]) {
+  return dayPlans.map((plan, index) => {
+    const fallbackDayStops = fallbackStops[index]?.map((city) => city.trim()).filter((city) => city.length > 0) ?? []
+    const reachedCities = plan.reachedCities.map((city) => city.trim()).filter((city) => city.length > 0)
+
+    if (index === 0) {
+      return reachedCities.length > 0 ? reachedCities : [fallbackDayStops[0] ?? '']
+    }
+
+    const previousFinalCity = dayPlans[index - 1]?.finalReachedCity.trim() || fallbackStops[index - 1]?.slice(-1)[0]?.trim() || ''
+    const nextStops = reachedCities.length > 0 ? [...reachedCities] : [fallbackDayStops[0] ?? previousFinalCity]
+
+    if (previousFinalCity) {
+      if (nextStops.length === 0) {
+        nextStops.push(previousFinalCity)
+      } else if (nextStops[0] !== previousFinalCity) {
+        nextStops.unshift(previousFinalCity)
+      }
+    }
+
+    return nextStops.filter((city, cityIndex, cities) => city.length > 0 && cities.indexOf(city) === cityIndex)
+  })
+}
+
 async function autoFillCities() {
   if (!canAutoFillCities.value) return
 
@@ -1346,12 +1469,15 @@ async function autoFillCities() {
     if (candidates.length === 0) return
 
     const orderedRoute = await getOrderedRoute(candidates)
-    const cityStops = applySelectedRouteEndpoints(await buildAutoFilledCityStops(orderedRoute, dayCount))
-    form.cityStops = cityStops
+    const plannedCityStops = applySelectedRouteEndpoints(await buildAutoFilledCityStops(orderedRoute, dayCount))
+    const draftDayPlans = await buildAutoActivities(plannedCityStops)
+    const normalizedCityStops = normalizeGeneratedCityStops(draftDayPlans, plannedCityStops)
+    const generatedDayPlans = await buildAutoActivities(normalizedCityStops)
+    form.cityStops = normalizeGeneratedCityStops(generatedDayPlans, normalizedCityStops)
+    form.dayActivities = generatedDayPlans.map((plan) => plan.activities)
     form.dayAccommodations = await buildAutoAccommodations(
-      cityStops.map((dayCities) => dayCities[dayCities.length - 1] ?? dayCities[0] ?? '')
+      generatedDayPlans.map((plan, index) => plan.finalReachedCity || form.cityStops[index]?.[0] || '')
     )
-    form.dayActivities = await buildAutoActivities(cityStops)
     expandedDays.value = Object.fromEntries(Array.from({ length: dayCount }, (_, index) => [index, true]))
   } finally {
     autoFillingCities.value = false
@@ -1367,8 +1493,15 @@ async function regenerateActivitiesForDay(dayIndex: number) {
     [dayIndex]: true
   }
   try {
-    const generatedActivities = await buildAutoActivities([form.cityStops[dayIndex] ?? []])
-    form.dayActivities[dayIndex] = generatedActivities[0] ?? []
+    const generatedDayPlans = await buildAutoActivities([form.cityStops[dayIndex] ?? []])
+    form.dayActivities[dayIndex] = generatedDayPlans[0]?.activities ?? []
+    form.cityStops[dayIndex] = generatedDayPlans[0]?.reachedCities?.length
+      ? generatedDayPlans[0].reachedCities
+      : [form.cityStops[dayIndex]?.[0] ?? '']
+    const regeneratedAccommodation = await buildAutoAccommodations([
+      generatedDayPlans[0]?.finalReachedCity || form.cityStops[dayIndex]?.[0] || ''
+    ])
+    form.dayAccommodations[dayIndex] = regeneratedAccommodation[0] ?? createEmptyAccommodation()
 
     if (form.dayActivities[dayIndex].length > 0) {
       expandedDays.value[dayIndex] = true
@@ -2325,6 +2458,9 @@ watch(
           :loading="props.isSaving"
           class="save-trip-btn"
         />
+        <small v-if="!canSubmit && submitBlockers.length > 0" class="submit-hint">
+          {{ submitBlockers[0] }}
+        </small>
       </form>
     </div>
 
