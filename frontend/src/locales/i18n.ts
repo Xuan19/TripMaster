@@ -21,6 +21,7 @@ export interface UiTexts {
   startCity: string
   endCity: string
   transportModes: string
+  hotelStars: string
   stayPreferences: string
   stayDays: string
   accommodation: string
@@ -84,6 +85,7 @@ export type TripFormTexts = Pick<
   | 'startCity'
   | 'endCity'
   | 'transportModes'
+  | 'hotelStars'
   | 'stayPreferences'
   | 'stayDays'
   | 'accommodation'
@@ -145,6 +147,7 @@ export const translations: Record<Language, UiTexts> = {
     startCity: 'Start city',
     endCity: 'End city',
     transportModes: 'Transport',
+    hotelStars: 'Hotel stars',
     stayPreferences: 'Stay by city',
     stayDays: 'Days',
     accommodation: 'Accommodation',
@@ -214,6 +217,7 @@ export const translations: Record<Language, UiTexts> = {
     startCity: 'Ville de depart',
     endCity: 'Ville d arrivee',
     transportModes: 'Transports',
+    hotelStars: 'Categorie hotel',
     stayPreferences: 'Sejour par ville',
     stayDays: 'Jours',
     accommodation: 'Hebergement',
@@ -283,6 +287,7 @@ export const translations: Record<Language, UiTexts> = {
     startCity: '起始城市',
     endCity: '结束城市',
     transportModes: '交通方式',
+    hotelStars: '酒店星级',
     stayPreferences: '城市停留',
     stayDays: '天数',
     accommodation: '住宿',

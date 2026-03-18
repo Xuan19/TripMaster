@@ -17,6 +17,8 @@ import {
   getEstimatedTransportCostDetails,
   getGeneratedMealCostDetails,
   getGeneratedMealPlan,
+  getGeneratedHotelCostDetails,
+  getGeneratedHotelPlan,
   getGeneratedVisitCost,
   getGeneratedVisitCostDetails,
   getGeneratedVisitDurationMinutes,
@@ -51,6 +53,7 @@ interface DayAccommodation {
   checkInTime: string
   name: string
   cost: number | null
+  costDetails?: string
 }
 
 interface StayPreference {
@@ -110,6 +113,7 @@ const form = reactive({
   routeStartCity: '',
   routeEndCity: '',
   allowedTransportModes: [...defaultAllowedTransportModes] as TransportMode[],
+  hotelStars: 3 as number | null,
   stayPreferences: [{ city: '', days: null }] as StayPreference[],
   cityStops: [] as string[][],
   dayAccommodations: [] as DayAccommodation[],
@@ -190,6 +194,9 @@ const maxStayPreferenceRows = computed(() => {
 const canAddStayPreference = computed(
   () => form.stayPreferences.length > 0 && form.stayPreferences.length < maxStayPreferenceRows.value
 )
+const shouldWrapStayPreferences = computed(() => form.stayPreferences.length > 2)
+const primaryStayPreferences = computed(() => form.stayPreferences.slice(0, 2))
+const overflowStayPreferences = computed(() => form.stayPreferences.slice(2))
 
 const itineraryDays = computed(() => {
   if (!form.startDate || !form.numberOfDays || form.numberOfDays < 1) return []
@@ -335,6 +342,10 @@ function remapFormCities() {
     city: remapCityValue(preference.city)
   }))
   form.cityStops = form.cityStops.map((dayStops) => dayStops.map((city) => remapCityValue(city)))
+}
+
+function setHotelStars(stars: number) {
+  form.hotelStars = stars
 }
 
 function hasActiveStayPreferences() {
@@ -503,6 +514,9 @@ const canSubmit = computed(
 const showCountryError = computed(() => form.countries.length === 0)
 const showCityLoader = computed(() => cityLoaderVisible.value)
 const hasSelectedCountry = computed(() => form.countries.length > 0)
+const showNumberOfDaysError = computed(
+  () => hasSelectedCountry.value && (form.numberOfDays === null || form.numberOfDays < 1)
+)
 const hasBudget = computed(() => form.budget !== null)
 const canAutoFillCities = computed(
   () =>
@@ -540,6 +554,12 @@ function parseIsoDate(value: string) {
   return new Date(year, month - 1, day)
 }
 
+function addDays(value: Date, days: number) {
+  const next = new Date(value)
+  next.setDate(next.getDate() + days)
+  return next
+}
+
 function getTripDayCount(startDate: string, endDate: string, details?: TripFormInitialData['details']) {
   if (details?.dayPlans?.length) return details.dayPlans.length
   const start = parseIsoDate(startDate)
@@ -554,12 +574,14 @@ function createEmptyAccommodation(): DayAccommodation {
     type: '',
     checkInTime: '',
     name: '',
-    cost: null
+    cost: null,
+    costDetails: ''
   }
 }
 
 function applyInitialData(initialData: TripFormInitialData | null) {
   if (!initialData) {
+    form.hotelStars = 3
     form.stayPreferences = [{ city: '', days: null }]
     form.dayAccommodations = []
     return
@@ -599,7 +621,8 @@ function applyInitialData(initialData: TripFormInitialData | null) {
       type: day.accommodation?.type ?? '',
       checkInTime: day.accommodation?.checkInTime ?? '',
       name: day.accommodation?.name ?? '',
-      cost: day.accommodation?.cost ?? null
+      cost: day.accommodation?.cost ?? null,
+      costDetails: ''
     })) ?? []
 
   form.cityStops = Array.from({ length: dayCount }, (_, index) => cityStopsFromDetails[index] ?? [''])
@@ -611,6 +634,7 @@ function applyInitialData(initialData: TripFormInitialData | null) {
   form.routeStartCity = cityStopsFromDetails[0]?.[0] ?? ''
   const lastDayCities = cityStopsFromDetails[cityStopsFromDetails.length - 1] ?? []
   form.routeEndCity = lastDayCities[lastDayCities.length - 1] ?? ''
+  form.hotelStars = initialData.details?.hotelStars ?? 3
   const stayCounts: Record<string, number> = {}
   cityStopsFromDetails.forEach((dayCities) => {
     const signature = dayCities.join(' -> ')
@@ -1279,6 +1303,38 @@ async function buildAutoActivities(dayStops: string[][]) {
   return dayActivities
 }
 
+async function buildAutoAccommodations(dayStops: string[]) {
+  const accommodations = await Promise.all(
+    dayStops.map(async (city, dayIndex) => {
+      const normalizedCity = city.trim()
+      if (!normalizedCity || form.hotelStars === null) return createEmptyAccommodation()
+
+      const checkInDate = itineraryDays.value[dayIndex]?.isoDate
+      const hotelPlan = getGeneratedHotelPlan(
+        normalizedCity,
+        form.hotelStars,
+        form.countries[0],
+        checkInDate
+      )
+
+      return {
+        type: hotelPlan.type,
+        checkInTime: '15:00',
+        name: hotelPlan.name,
+        cost: hotelPlan.cost,
+        costDetails: getGeneratedHotelCostDetails(
+          normalizedCity,
+          form.hotelStars,
+          form.countries[0],
+          checkInDate
+        )
+      }
+    })
+  )
+
+  return accommodations
+}
+
 async function autoFillCities() {
   if (!canAutoFillCities.value) return
 
@@ -1292,6 +1348,9 @@ async function autoFillCities() {
     const orderedRoute = await getOrderedRoute(candidates)
     const cityStops = applySelectedRouteEndpoints(await buildAutoFilledCityStops(orderedRoute, dayCount))
     form.cityStops = cityStops
+    form.dayAccommodations = await buildAutoAccommodations(
+      cityStops.map((dayCities) => dayCities[dayCities.length - 1] ?? dayCities[0] ?? '')
+    )
     form.dayActivities = await buildAutoActivities(cityStops)
     expandedDays.value = Object.fromEntries(Array.from({ length: dayCount }, (_, index) => [index, true]))
   } finally {
@@ -1399,6 +1458,23 @@ function handleAccommodationNameChange(dayIndex: number, value: string) {
 
 function handleAccommodationCostChange(dayIndex: number, value: number | null) {
   ensureDayAccommodation(dayIndex).cost = value
+}
+
+function getAccommodationCostDetails(dayIndex: number) {
+  const accommodation = form.dayAccommodations[dayIndex]
+  if (!accommodation) return ''
+  if (accommodation.costDetails?.trim()) return accommodation.costDetails
+
+  if (accommodation.type === 'hotel' && form.hotelStars !== null) {
+    const cityStops = form.cityStops[dayIndex] ?? []
+    const city = cityStops[cityStops.length - 1] ?? cityStops[0] ?? ''
+    const checkInDate = itineraryDays.value[dayIndex]?.isoDate
+    if (!city || !checkInDate) return ''
+
+    return getGeneratedHotelCostDetails(city, form.hotelStars, form.countries[0], checkInDate)
+  }
+
+  return ''
 }
 
 function removeActivity(dayIndex: number, activityIndex: number) {
@@ -1721,6 +1797,7 @@ function handleSubmit() {
     budget: Number(form.budget ?? 0),
     details: {
       countries: [...form.countries],
+      hotelStars: form.hotelStars === null ? undefined : Number(form.hotelStars),
       dayPlans: itineraryDays.value.map((item) => ({
         day: item.day,
         date: item.isoDate,
@@ -1810,12 +1887,28 @@ watch(
           </div>
 
           <div class="field-group compact-field">
-            <label>{{ props.texts.numberOfDays }}</label>
+            <div class="field-label-row">
+              <label class="field-label-with-warning">
+                <span>{{ props.texts.numberOfDays }}</span>
+                <button
+                  v-if="showNumberOfDaysError"
+                  v-tooltip.bottom="'Please enter at least 1 day.'"
+                  type="button"
+                  class="field-warning-tooltip"
+                  aria-label="Number of days is required"
+                >
+                  <i class="pi pi-exclamation-circle" />
+                </button>
+              </label>
+            </div>
             <InputNumber
               v-model="form.numberOfDays"
+              :class="{ 'field-warning': showNumberOfDaysError }"
               mode="decimal"
               :min="1"
               :max-fraction-digits="0"
+              input-id="trip-number-of-days"
+              aria-required="true"
               :disabled="!hasSelectedCountry"
             />
           </div>
@@ -1878,35 +1971,91 @@ watch(
 
         <div v-if="form.stayPreferences.length > 0" class="field-group">
           <div class="stay-preferences-field">
-            <label>{{ props.texts.stayPreferences }}</label>
-            <div class="stay-preferences-grid">
-            <div v-for="(preference, index) in form.stayPreferences" :key="`stay-preference-${index}`" class="stay-preference-row">
-              <Dropdown
-                v-model="preference.city"
-                :options="routeCityOptions"
-                :placeholder="props.texts.city"
-                :filter="true"
-                :virtual-scroller-options="{ itemSize: 36 }"
-                :disabled="!hasSelectedCountry"
-              />
-              <InputNumber
-                v-model="preference.days"
-                mode="decimal"
-                :min="1"
-                :max="Math.max(1, Math.floor(form.numberOfDays ?? 1))"
-                :max-fraction-digits="0"
-                :placeholder="props.texts.stayDays"
-              />
-              <Button
-                v-if="index === form.stayPreferences.length - 1 && canAddStayPreference"
+            <label>{{ props.texts.hotelStars }}</label>
+            <div class="hotel-stars-picker" role="radiogroup" :aria-label="props.texts.hotelStars">
+              <button
+                v-for="star in 5"
+                :key="`hotel-star-${star}`"
                 type="button"
-                text
-                rounded
-                icon="pi pi-plus"
-                class="add-stay-preference-btn"
-                @click="addStayPreferenceRow"
-              />
+                :class="['hotel-star-button', { 'hotel-star-button-active': star <= (form.hotelStars ?? 0) }]"
+                :aria-label="`${star} star`"
+                :aria-checked="star === form.hotelStars"
+                role="radio"
+                @click="setHotelStars(star)"
+              >
+                <i :class="['pi', star <= (form.hotelStars ?? 0) ? 'pi-star-fill' : 'pi-star']" />
+              </button>
             </div>
+          </div>
+          <div class="stay-preferences-field">
+            <label>{{ props.texts.stayPreferences }}</label>
+            <div class="stay-preferences-stack">
+              <div class="stay-preferences-grid">
+                <div
+                  v-for="(preference, index) in primaryStayPreferences"
+                  :key="`stay-preference-primary-${index}`"
+                  class="stay-preference-row"
+                >
+                  <Dropdown
+                    v-model="preference.city"
+                    :options="routeCityOptions"
+                    :placeholder="props.texts.city"
+                    :filter="true"
+                    :virtual-scroller-options="{ itemSize: 36 }"
+                    :disabled="!hasSelectedCountry"
+                  />
+                  <InputNumber
+                    v-model="preference.days"
+                    mode="decimal"
+                    :min="1"
+                    :max="Math.max(1, Math.floor(form.numberOfDays ?? 1))"
+                    :max-fraction-digits="0"
+                    :placeholder="props.texts.stayDays"
+                  />
+                  <Button
+                    v-if="!shouldWrapStayPreferences && index === primaryStayPreferences.length - 1 && canAddStayPreference"
+                    type="button"
+                    text
+                    rounded
+                    icon="pi pi-plus"
+                    class="add-stay-preference-btn"
+                    @click="addStayPreferenceRow"
+                  />
+                </div>
+              </div>
+              <div v-if="shouldWrapStayPreferences" class="stay-preferences-grid stay-preferences-grid-overflow">
+                <div
+                  v-for="(preference, overflowIndex) in overflowStayPreferences"
+                  :key="`stay-preference-overflow-${overflowIndex + 2}`"
+                  class="stay-preference-row"
+                >
+                  <Dropdown
+                    v-model="preference.city"
+                    :options="routeCityOptions"
+                    :placeholder="props.texts.city"
+                    :filter="true"
+                    :virtual-scroller-options="{ itemSize: 36 }"
+                    :disabled="!hasSelectedCountry"
+                  />
+                  <InputNumber
+                    v-model="preference.days"
+                    mode="decimal"
+                    :min="1"
+                    :max="Math.max(1, Math.floor(form.numberOfDays ?? 1))"
+                    :max-fraction-digits="0"
+                    :placeholder="props.texts.stayDays"
+                  />
+                  <Button
+                    v-if="overflowIndex === overflowStayPreferences.length - 1 && canAddStayPreference"
+                    type="button"
+                    text
+                    rounded
+                    icon="pi pi-plus"
+                    class="add-stay-preference-btn"
+                    @click="addStayPreferenceRow"
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -2142,6 +2291,7 @@ watch(
 		                  </div>
 		                  <div class="accommodation-input-field accommodation-cost-field">
 		                    <small aria-hidden="true">&nbsp;</small>
+                        <div class="activity-cost-field">
 		                    <InputNumber
 		                      :model-value="ensureDayAccommodation(item.index).cost"
 		                      mode="currency"
@@ -2150,6 +2300,16 @@ watch(
 		                      :placeholder="props.texts.activityCost"
 		                      @update:model-value="handleAccommodationCostChange(item.index, $event as number | null)"
 		                    />
+                        <button
+                          v-if="getAccommodationCostDetails(item.index)"
+                          v-tooltip.bottom="getAccommodationCostDetails(item.index)"
+                          type="button"
+                          class="activity-cost-info accommodation-cost-info"
+                          aria-label="Accommodation rate details"
+                        >
+                          <i class="pi pi-info-circle" />
+                        </button>
+                        </div>
 		                  </div>
 		                </div>
 		              </div>

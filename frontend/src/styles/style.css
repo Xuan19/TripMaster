@@ -262,9 +262,55 @@ body {
   color: var(--tm-text);
 }
 
-.field-error {
-  color: #dc2626;
-  font-size: 0.78rem;
+.field-label-row {
+  display: flex;
+  align-items: baseline;
+}
+
+.field-label-with-warning {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.22rem;
+}
+
+.field-warning-tooltip {
+  border: none;
+  background: transparent;
+  color: #d97706;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: help;
+  width: 0.8rem;
+  min-width: 0.8rem;
+  height: 0.8rem;
+}
+
+.field-warning-tooltip .pi {
+  font-size: 0.68rem;
+}
+
+.field-warning-tooltip:hover,
+.field-warning-tooltip:focus-visible {
+  color: #b45309;
+  outline: none;
+}
+
+.trip-form .p-inputnumber.field-warning .p-inputtext {
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 0.12rem rgba(245, 158, 11, 0.16);
+}
+
+.trip-form .p-inputnumber.field-warning:hover .p-inputtext,
+.trip-form .p-inputnumber.field-warning .p-inputtext:hover {
+  border-color: #d97706;
+}
+
+.trip-form .p-inputnumber.field-warning.p-focus .p-inputtext,
+.trip-form .p-inputnumber.field-warning .p-inputtext:focus {
+  border-color: #d97706;
+  box-shadow: 0 0 0 0.12rem rgba(245, 158, 11, 0.22);
 }
 
 .city-loader {
@@ -303,7 +349,7 @@ body {
   align-items: center;
   min-width: 0;
   width: 100%;
-  overflow-x: auto;
+  overflow: visible;
 }
 
 .stay-preferences-field {
@@ -311,16 +357,79 @@ body {
   align-items: center;
   gap: 0.6rem;
   min-width: 0;
+  margin-top: 1rem;
 }
 
 .stay-preferences-field > label {
   white-space: nowrap;
-  flex: 0 0 auto;
+  flex: 0 0 88px;
+  width: 88px;
+  align-self: flex-start;
+  padding-top: 0.55rem;
   padding-right: 0;
 }
 
-.stay-preferences-field > .stay-preferences-grid {
+.stay-preferences-field > .stay-preferences-stack {
   flex: 1 1 auto;
+}
+
+.stay-preferences-stack {
+  display: grid;
+  gap: 0.6rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.stay-preferences-grid-overflow {
+  flex-wrap: wrap;
+}
+
+.hotel-stars-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  min-height: 2.35rem;
+  padding: 0.18rem 0 0.28rem;
+}
+
+.hotel-star-button {
+  width: 1.95rem;
+  height: 1.95rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: #d8b4c7;
+  cursor: pointer;
+  transition:
+    transform 0.16s ease,
+    color 0.16s ease,
+    background-color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.hotel-star-button .pi {
+  font-size: 1rem;
+}
+
+.hotel-star-button:hover {
+  color: var(--tm-warm);
+  background: rgba(249, 115, 22, 0.1);
+  transform: translateY(-1px);
+}
+
+.hotel-star-button:focus-visible {
+  outline: none;
+  color: var(--tm-accent-strong);
+  background: rgba(219, 39, 119, 0.1);
+  box-shadow: 0 0 0 0.12rem rgba(219, 39, 119, 0.18);
+}
+
+.hotel-star-button-active {
+  color: var(--tm-warm);
+  background: rgba(249, 115, 22, 0.12);
 }
 
 .stay-preference-row {
@@ -734,9 +843,9 @@ body {
   display: grid;
   grid-template-columns:
     minmax(150px, 1fr)
-    minmax(105px, 0.8fr)
-    minmax(220px, 1.5fr)
-    minmax(130px, 0.9fr);
+    minmax(88px, 0.62fr)
+    minmax(170px, 1.15fr)
+    minmax(170px, 1.05fr);
   column-gap: 0.8rem;
   row-gap: 0.35rem;
   align-items: end;
@@ -788,7 +897,7 @@ body {
 }
 
 .accommodation-checkin-field .p-inputtext {
-  width: 110px;
+  width: 100%;
   align-self: center;
 }
 
@@ -808,6 +917,10 @@ body {
 }
 
 .accommodation-cost-field .p-inputnumber {
+  width: 100%;
+}
+
+.accommodation-cost-field .activity-cost-field {
   width: 100%;
 }
 
@@ -1020,6 +1133,16 @@ body {
   outline: none;
 }
 
+.accommodation-cost-info {
+  width: 1.45rem;
+  min-width: 1.45rem;
+  color: var(--tm-accent-strong);
+}
+
+.accommodation-cost-info .pi {
+  font-size: 0.9rem;
+}
+
 .activity-row > .p-dropdown,
 .activity-row > .activity-cost-field,
 .activity-row > .remove-activity-btn {
@@ -1181,6 +1304,10 @@ body {
     display: grid;
     gap: 0.45rem;
     align-items: stretch;
+  }
+
+  .hotel-stars-picker {
+    width: fit-content;
   }
 
   .stay-preferences-grid {

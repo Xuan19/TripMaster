@@ -25,6 +25,7 @@ export interface TripDayDetails {
 
 export interface TripPlanDetails {
   countries: string[]
+  hotelStars?: number
   dayPlans: TripDayDetails[]
 }
 

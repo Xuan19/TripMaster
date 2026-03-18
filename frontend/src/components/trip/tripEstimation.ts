@@ -13,6 +13,12 @@ interface MealEstimate {
   pricingBasis: string
 }
 
+interface HotelEstimate {
+  name: string
+  cost: number
+  pricingBasis: string
+}
+
 interface TrainFareProfile {
   label: string
   baseFare: number
@@ -118,6 +124,66 @@ const countryLocalTransitBaseFare: Record<string, number> = {
   Canada: 3,
   Australia: 3.1
 }
+
+const countryHotelNightlyBaseRate: Record<string, number> = {
+  China: 72,
+  France: 138,
+  Japan: 122,
+  'United States': 148,
+  'United Kingdom': 145,
+  Italy: 128,
+  Spain: 112,
+  Germany: 132,
+  Canada: 136,
+  Australia: 142
+}
+
+const hotelStarMultiplier: Record<number, number> = {
+  1: 0.5,
+  2: 0.72,
+  3: 1,
+  4: 1.42,
+  5: 2.1
+}
+
+const cityHotelNightlyRateByStar: Record<string, Partial<Record<number, number>>> = {
+  beijing: { 2: 17, 3: 41, 4: 66, 5: 100 },
+  shanghai: { 2: 30, 3: 85, 4: 177, 5: 269 },
+  paris: { 2: 92, 3: 115, 4: 160, 5: 470 },
+  tokyo: { 1: 26, 2: 37, 3: 40, 4: 82, 5: 267 },
+  'new york': { 1: 92, 2: 141, 3: 158, 4: 207, 5: 464 },
+  london: { 1: 79, 2: 71, 3: 110, 4: 164, 5: 375 },
+  rome: { 1: 101, 2: 92, 3: 97, 4: 119, 5: 209 },
+  barcelona: { 1: 136, 2: 78, 3: 159, 4: 147, 5: 222 },
+  berlin: { 1: 101, 2: 62, 3: 85, 4: 97, 5: 189 },
+  toronto: { 1: 73, 2: 94, 3: 141, 4: 205, 5: 497 },
+  sydney: { 1: 85, 2: 51, 3: 84, 4: 111, 5: 169 }
+}
+
+const hotelCityRateMultiplier: Record<string, number> = {
+  paris: 1.28,
+  nice: 1.24,
+  london: 1.32,
+  edinburgh: 1.12,
+  rome: 1.2,
+  venice: 1.26,
+  milan: 1.16,
+  florence: 1.18,
+  barcelona: 1.18,
+  madrid: 1.08,
+  seville: 1.05,
+  tokyo: 1.24,
+  kyoto: 1.16,
+  osaka: 1.08,
+  'new york': 1.34,
+  'san francisco': 1.28,
+  'los angeles': 1.18,
+  sydney: 1.22,
+  melbourne: 1.12,
+  vancouver: 1.14
+}
+
+const hotelNameSuffixes = ['Grand Hotel', 'Central House', 'City Suites', 'Residence', 'Boutique Stay']
 
 const cityHighlightsByName: Record<string, string[]> = {
   beijing: ['Forbidden City', 'Temple of Heaven', 'Summer Palace', 'Mutianyu Great Wall', 'Tiananmen Square', 'Jingshan Park', 'Beihai Park'],
@@ -1024,6 +1090,68 @@ export function getGeneratedMealPlan(city: string, mealIndex: number, fallbackCo
 export function getGeneratedMealCostDetails(city: string, mealIndex: number, fallbackCountry?: string) {
   const estimate = getMealEstimate(city, mealIndex, fallbackCountry)
   return `Estimated price. Average price for 1 person: ${estimate.name} (${estimate.pricingBasis})`
+}
+
+function getHotelEstimate(
+  city: string,
+  stars: number,
+  fallbackCountry?: string,
+  stayDate?: string
+): HotelEstimate {
+  const country = inferCountryForCity(city, fallbackCountry)
+  const normalizedCity = city.trim().toLowerCase()
+  const seasonMultiplier = getSeasonMultiplier(stayDate)
+  const sampledCityRates = cityHotelNightlyRateByStar[normalizedCity]
+
+  let nightlyCost: number
+  let pricingBasis: string
+
+  if (sampledCityRates?.[stars] !== undefined) {
+    nightlyCost = Math.max(35, Math.round(sampledCityRates[stars]! * seasonMultiplier))
+    pricingBasis = `${stars}-star sampled city average for ${city}`
+  } else {
+    const baseRate = countryHotelNightlyBaseRate[country] ?? 120
+    const starMultiplier = hotelStarMultiplier[stars] ?? hotelStarMultiplier[3]
+    const cityMultiplier =
+      hotelCityRateMultiplier[normalizedCity] ??
+      (isTouristHub(city) ? 1.12 : 0.96)
+    nightlyCost = Math.max(35, Math.round(baseRate * starMultiplier * cityMultiplier * seasonMultiplier))
+    pricingBasis = `${stars}-star hotel, ${country} nightly base, ${city} hotel profile`
+  }
+
+  const suffix = hotelNameSuffixes[Math.max(0, (stars - 1) % hotelNameSuffixes.length)]
+  const name = `${city} ${suffix}`
+  const seasonLabel = seasonMultiplier > 1.1 ? 'high season adjusted' : seasonMultiplier < 1 ? 'low season adjusted' : 'standard season'
+
+  return {
+    name,
+    cost: nightlyCost,
+    pricingBasis: `${pricingBasis}, ${seasonLabel}`
+  }
+}
+
+export function getGeneratedHotelPlan(
+  city: string,
+  stars: number,
+  fallbackCountry?: string,
+  stayDate?: string
+) {
+  const estimate = getHotelEstimate(city, stars, fallbackCountry, stayDate)
+  return {
+    type: 'hotel',
+    name: estimate.name,
+    cost: estimate.cost
+  }
+}
+
+export function getGeneratedHotelCostDetails(
+  city: string,
+  stars: number,
+  fallbackCountry?: string,
+  stayDate?: string
+) {
+  const estimate = getHotelEstimate(city, stars, fallbackCountry, stayDate)
+  return `Proposed nightly rate for a ${stars}-star hotel in ${city}. ${estimate.pricingBasis}.`
 }
 
 function resolveTrainFareProfile(country: string, trainLabel?: string | null): TrainFareProfile {
