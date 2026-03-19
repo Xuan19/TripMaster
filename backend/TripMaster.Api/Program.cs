@@ -136,11 +136,12 @@ static string ConvertPostgresUrlToConnectionString(string databaseUrl)
     var username = Uri.UnescapeDataString(userInfo[0]);
     var password = userInfo.Length > 1 ? Uri.UnescapeDataString(userInfo[1]) : string.Empty;
     var database = uri.AbsolutePath.Trim('/');
+    var port = uri.Port > 0 ? uri.Port : 5432;
 
     var query = QueryHelpers.ParseQuery(uri.Query);
     var sslMode = query.TryGetValue("sslmode", out var configuredSslMode)
         ? configuredSslMode.ToString()
         : "Require";
 
-    return $"Host={uri.Host};Port={uri.Port};Database={database};Username={username};Password={password};SSL Mode={sslMode};Trust Server Certificate=true";
+    return $"Host={uri.Host};Port={port};Database={database};Username={username};Password={password};SSL Mode={sslMode};Trust Server Certificate=true";
 }
