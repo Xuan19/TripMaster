@@ -112,6 +112,7 @@ if (!app.Environment.IsDevelopment())
 app.UseCors("VueApp");
 app.UseAuthentication();
 app.UseAuthorization();
+app.MapGet("/api/health", () => Results.Ok(new { status = "ok" }));
 app.MapControllers();
 
 app.Run();
@@ -171,12 +172,6 @@ static bool IsAllowedOrigin(string origin, string[] allowedOrigins)
     if (!Uri.TryCreate(normalizedOrigin, UriKind.Absolute, out var uri))
     {
         return false;
-    }
-
-    if (uri.Scheme == Uri.UriSchemeHttps &&
-        uri.Host.EndsWith(".vercel.app", StringComparison.OrdinalIgnoreCase))
-    {
-        return true;
     }
 
     return uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase);

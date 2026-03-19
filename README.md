@@ -56,3 +56,13 @@ VITE_API_BASE_URL=https://localhost:7024/api
 ```
 
 If the variable is missing, the app falls back to `https://localhost:7024/api`.
+
+## Deployed setup
+
+The current production setup uses:
+
+- `Vercel` for the frontend
+- `Railway` for the ASP.NET API
+- `Neon` for Postgres
+
+In production, Vercel rewrites `/api/*` to the Railway backend, so the browser talks to the frontend and API through the same origin.
