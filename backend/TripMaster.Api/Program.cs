@@ -82,7 +82,8 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("VueApp", policy =>
     {
-        policy.WithOrigins(allowedOrigins)
+        policy.SetIsOriginAllowed(origin =>
+            allowedOrigins.Contains(NormalizeOrigin(origin), StringComparer.OrdinalIgnoreCase))
             .AllowAnyHeader()
             .AllowAnyMethod();
     });
