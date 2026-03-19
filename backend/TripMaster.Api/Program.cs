@@ -73,8 +73,10 @@ var allowedOrigins = builder.Configuration
     .GetSection("Frontend:AllowedOrigins")
     .Get<string[]>()
     ?.Where(origin => !string.IsNullOrWhiteSpace(origin))
+    .Select(NormalizeOrigin)
+    .Distinct(StringComparer.OrdinalIgnoreCase)
     .ToArray()
-    ?? ["http://localhost:5173"];
+    ?? [NormalizeOrigin("http://localhost:5173")];
 
 builder.Services.AddCors(options =>
 {
@@ -150,4 +152,9 @@ static string ConvertPostgresUrlToConnectionString(string databaseUrl)
         : "Require";
 
     return $"Host={uri.Host};Port={port};Database={database};Username={username};Password={password};SSL Mode={sslMode};Trust Server Certificate=true";
+}
+
+static string NormalizeOrigin(string origin)
+{
+    return origin.Trim().TrimEnd('/');
 }
