@@ -41,6 +41,14 @@ interface VisitTransferInfo {
   durationMinutes: number
 }
 
+interface EnRouteStopSuggestion {
+  city: string
+  site: string
+  durationMinutes: number
+  estimatedCost: number
+  pricingBasis: string
+}
+
 export const fallbackCountryOptions = [
   'China',
   'France',
@@ -191,6 +199,16 @@ const cityHighlightsByName: Record<string, string[]> = {
   shenzhen: ['Window of the World', 'OCT Loft', 'Dameisha Beach', 'Ping An Finance Centre', 'Lianhuashan Park', 'Splendid China Folk Village', 'Shenzhen Bay Park'],
   guangzhou: ['Canton Tower', 'Shamian Island', 'Chen Clan Ancestral Hall', 'Yuexiu Park', 'Beijing Road', 'Sun Yat-sen Memorial Hall', 'Pearl River Night Cruise'],
   paris: ['Eiffel Tower', 'Louvre Museum', 'Notre-Dame Cathedral', 'Montmartre', "Musee d'Orsay", 'Arc de Triomphe', 'Luxembourg Gardens', 'Sainte-Chapelle', 'Palace of Versailles', 'Gardens of Versailles', 'Claude Monet House', 'Disneyland Paris'],
+  tours: ['Cathedrale Saint-Gatien', 'Place Plumereau', 'Basilique Saint-Martin', 'Musee des Beaux-Arts de Tours', 'Chateau de Tours'],
+  blois: ['Chateau de Chambord', 'Chateau Royal de Blois', 'Maison de la Magie', 'Blois old town', 'Fondation du Doute'],
+  chartres: ['Chartres Cathedral', 'Maison Picassiette', "Chartres old town", "Centre International du Vitrail", 'Eure river banks'],
+  orleans: ['Cathedrale Sainte-Croix d Orleans', 'Place du Martroi', 'Maison de Jeanne d Arc', 'Loire riverfront', 'Hotel Groslot'],
+  bordeaux: ['Place de la Bourse', 'Miroir d eau', 'Cite du Vin', 'Bordeaux Cathedral', 'Rue Sainte-Catherine'],
+  toulouse: ['Place du Capitole', 'Basilique Saint-Sernin', 'Couvent des Jacobins', 'Canal du Midi', 'Cite de l Espace'],
+  strasbourg: ['Strasbourg Cathedral', 'La Petite France', 'Palais Rohan', 'Parc de l Orangerie', 'European Parliament'],
+  lille: ['Grand Place Lille', 'Vieux-Lille', 'Palais des Beaux-Arts de Lille', 'La Vieille Bourse', 'Citadelle de Lille'],
+  nantes: ['Chateau des ducs de Bretagne', 'Les Machines de l Ile', 'Passage Pommeraye', 'Cathedrale Saint-Pierre-et-Saint-Paul', 'Ile de Versailles'],
+  rouen: ['Rouen Cathedral', 'Gros-Horloge', 'Place du Vieux-Marche', 'Musee des Beaux-Arts de Rouen', 'Aitre Saint-Maclou'],
   lyon: ['Basilica of Notre-Dame de Fourviere', 'Vieux Lyon', "Parc de la Tete d'Or", 'Place Bellecour', 'Les Halles de Lyon Paul Bocuse', 'Musee des Confluences', 'Traboules of Lyon'],
   marseille: ['Old Port', 'Notre-Dame de la Garde', 'Le Panier', 'Mucem', 'Calanques National Park', 'Palais Longchamp', 'La Corniche'],
   nice: ['Promenade des Anglais', 'Castle Hill', 'Old Nice', 'Marc Chagall National Museum', 'Cours Saleya Market', 'Place Massena', 'Matisse Museum'],
@@ -229,6 +247,16 @@ const cityHighlightsByName: Record<string, string[]> = {
 }
 
 const cityNearbyDayTripsByName: Record<string, string[]> = {
+  tours: ['Chateau de Chenonceau', 'Chateau d Amboise', 'Chateau de Villandry'],
+  blois: ['Chateau de Cheverny', 'Chateau de Chaumont-sur-Loire'],
+  chartres: ['Chateau de Maintenon'],
+  orleans: ['Chateau de Chambord'],
+  bordeaux: ['Saint-Emilion'],
+  toulouse: ['Carcassonne'],
+  strasbourg: ['Colmar old town'],
+  lille: ['Lens Louvre-Lens'],
+  nantes: ['Clisson old town'],
+  rouen: ['Giverny'],
   beijing: ['Badaling Great Wall', 'Universal Beijing Resort'],
   shanghai: ['Zhujiajiao Water Town', 'Suzhou Classical Gardens'],
   shenzhen: ['Nantou Ancient Town', 'Dapeng Fortress'],
@@ -268,6 +296,16 @@ const cityNearbyDayTripsByName: Record<string, string[]> = {
   melbourne: ['Great Ocean Road', 'Phillip Island Penguin Parade'],
   brisbane: ['Gold Coast Surfers Paradise', 'Australia Zoo'],
   perth: ['Rottnest Island', 'Swan Valley']
+}
+
+const enRouteStopByRoute: Record<string, EnRouteStopSuggestion> = {
+  'paris|tours': {
+    city: 'Blois',
+    site: 'Chateau de Chambord',
+    durationMinutes: 90,
+    estimatedCost: 19,
+    pricingBasis: 'iconic Loire Valley stop near Blois on the way to Tours'
+  }
 }
 
 const cityMealsByName: Record<string, MealOption[]> = {
@@ -1090,6 +1128,11 @@ export function getGeneratedMealPlan(city: string, mealIndex: number, fallbackCo
 export function getGeneratedMealCostDetails(city: string, mealIndex: number, fallbackCountry?: string) {
   const estimate = getMealEstimate(city, mealIndex, fallbackCountry)
   return `Estimated price. Average price for 1 person: ${estimate.name} (${estimate.pricingBasis})`
+}
+
+export function getPopularEnRouteStop(fromCity: string, toCity: string) {
+  const key = [fromCity.trim().toLowerCase(), toCity.trim().toLowerCase()].sort().join('|')
+  return enRouteStopByRoute[key] ?? null
 }
 
 function getHotelEstimate(

@@ -455,6 +455,21 @@ body {
   background: #fff1f7;
 }
 
+.auto-fill-cities-btn.p-button.p-button-loading {
+  justify-content: center;
+}
+
+.auto-fill-cities-btn.p-button.p-button-loading .p-button-label {
+  opacity: 0;
+}
+
+.auto-fill-cities-btn.p-button.p-button-loading .p-button-icon-left {
+  position: absolute;
+  inset-inline-start: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+}
+
 .auto-fill-cities-btn.p-button:enabled:hover {
   border-color: var(--tm-accent);
   color: #8f0f46;
