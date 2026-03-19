@@ -83,7 +83,7 @@ builder.Services.AddCors(options =>
     options.AddPolicy("VueApp", policy =>
     {
         policy.SetIsOriginAllowed(origin =>
-            allowedOrigins.Contains(NormalizeOrigin(origin), StringComparer.OrdinalIgnoreCase))
+            IsAllowedOrigin(origin, allowedOrigins))
             .AllowAnyHeader()
             .AllowAnyMethod();
     });
@@ -158,4 +158,26 @@ static string ConvertPostgresUrlToConnectionString(string databaseUrl)
 static string NormalizeOrigin(string origin)
 {
     return origin.Trim().TrimEnd('/');
+}
+
+static bool IsAllowedOrigin(string origin, string[] allowedOrigins)
+{
+    var normalizedOrigin = NormalizeOrigin(origin);
+    if (allowedOrigins.Contains(normalizedOrigin, StringComparer.OrdinalIgnoreCase))
+    {
+        return true;
+    }
+
+    if (!Uri.TryCreate(normalizedOrigin, UriKind.Absolute, out var uri))
+    {
+        return false;
+    }
+
+    if (uri.Scheme == Uri.UriSchemeHttps &&
+        uri.Host.EndsWith(".vercel.app", StringComparison.OrdinalIgnoreCase))
+    {
+        return true;
+    }
+
+    return uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase);
 }
