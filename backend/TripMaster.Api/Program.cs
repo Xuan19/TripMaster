@@ -12,6 +12,12 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 
+var port = Environment.GetEnvironmentVariable("PORT");
+if (int.TryParse(port, out var railwayPort) && railwayPort > 0)
+{
+    builder.WebHost.UseUrls($"http://0.0.0.0:{railwayPort}");
+}
+
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
