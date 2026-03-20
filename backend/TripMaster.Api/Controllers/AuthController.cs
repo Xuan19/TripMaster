@@ -36,6 +36,7 @@ public class AuthController : ControllerBase
     {
         var normalizedUsername = request.Username.Trim();
         var normalizedEmail = request.Email.Trim().ToLowerInvariant();
+        var shouldRequireEmailVerification = _emailVerificationService.IsEmailProviderConfigured();
         var exists = await _db.Users.AnyAsync(u => u.Username == normalizedUsername);
         if (exists)
         {
@@ -54,18 +55,28 @@ public class AuthController : ControllerBase
             Username = normalizedUsername,
             Email = normalizedEmail,
             PasswordHash = PasswordHasher.HashPassword(request.Password),
-            IsEmailVerified = false,
-            EmailVerificationToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(24)),
-            EmailVerificationTokenExpiresUtc = DateTime.UtcNow.AddHours(24)
+            IsEmailVerified = !shouldRequireEmailVerification,
+            EmailVerificationToken = shouldRequireEmailVerification
+                ? Convert.ToHexString(RandomNumberGenerator.GetBytes(24))
+                : null,
+            EmailVerificationTokenExpiresUtc = shouldRequireEmailVerification
+                ? DateTime.UtcNow.AddHours(24)
+                : null
         };
 
         _db.Users.Add(user);
         await _db.SaveChangesAsync(cancellationToken);
-        await _emailVerificationService.SendVerificationEmailAsync(user, cancellationToken);
+
+        if (shouldRequireEmailVerification)
+        {
+            await _emailVerificationService.SendVerificationEmailAsync(user, cancellationToken);
+        }
 
         return Accepted(new RegisterResponse
         {
-            Message = "Account created. Please confirm your email before signing in.",
+            Message = shouldRequireEmailVerification
+                ? "Account created. Please confirm your email before signing in."
+                : "Account created. You can now sign in.",
             VerificationToken = _emailVerificationService.ShouldExposeVerificationToken()
                 ? user.EmailVerificationToken
                 : null

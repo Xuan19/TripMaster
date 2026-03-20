@@ -1,5 +1,4 @@
-using System.Net;
-using System.Net.Mail;
+using System.Net.Http.Json;
 using Microsoft.Extensions.Options;
 using TripMaster.Api.Configuration;
 using TripMaster.Api.Models;
@@ -11,15 +10,18 @@ public sealed class EmailVerificationService
     private readonly EmailOptions _options;
     private readonly ILogger<EmailVerificationService> _logger;
     private readonly IWebHostEnvironment _environment;
+    private readonly HttpClient _httpClient;
 
     public EmailVerificationService(
         IOptions<EmailOptions> options,
         ILogger<EmailVerificationService> logger,
-        IWebHostEnvironment environment)
+        IWebHostEnvironment environment,
+        HttpClient httpClient)
     {
         _options = options.Value;
         _logger = logger;
         _environment = environment;
+        _httpClient = httpClient;
     }
 
     public async Task SendVerificationEmailAsync(User user, CancellationToken cancellationToken)
@@ -40,32 +42,33 @@ public sealed class EmailVerificationService
             This link expires in 24 hours.
             """;
 
-        if (string.IsNullOrWhiteSpace(_options.SmtpHost) || string.IsNullOrWhiteSpace(_options.FromAddress))
+        if (!IsEmailProviderConfigured())
         {
             _logger.LogInformation("Email verification for {Email}: {VerificationUrl}", user.Email, verificationUrl);
             return;
         }
 
-        using var message = new MailMessage
+        using var request = new HttpRequestMessage(HttpMethod.Post, "https://api.resend.com/emails")
         {
-            From = new MailAddress(_options.FromAddress, _options.FromName),
-            Subject = subject,
-            Body = body
+            Content = JsonContent.Create(new
+            {
+                from = string.IsNullOrWhiteSpace(_options.FromName)
+                    ? _options.FromAddress
+                    : $"{_options.FromName} <{_options.FromAddress}>",
+                to = new[] { user.Email },
+                subject,
+                text = body
+            })
         };
-        message.To.Add(user.Email);
-
-        using var client = new SmtpClient(_options.SmtpHost, _options.Port)
-        {
-            EnableSsl = _options.EnableSsl
-        };
-
-        if (!string.IsNullOrWhiteSpace(_options.Username))
-        {
-            client.Credentials = new NetworkCredential(_options.Username, _options.Password);
-        }
+        request.Headers.Add("Authorization", $"Bearer {_options.ResendApiKey}");
 
         cancellationToken.ThrowIfCancellationRequested();
-        await client.SendMailAsync(message, cancellationToken);
+        using var response = await _httpClient.SendAsync(request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            throw new InvalidOperationException($"Resend email request failed: {(int)response.StatusCode} {responseBody}");
+        }
     }
 
     public string BuildVerificationUrl(string email, string token)
@@ -77,6 +80,12 @@ public sealed class EmailVerificationService
 
     public bool ShouldExposeVerificationToken()
     {
-        return _environment.IsDevelopment() || string.IsNullOrWhiteSpace(_options.SmtpHost);
+        return _environment.IsDevelopment() && IsEmailProviderConfigured();
+    }
+
+    public bool IsEmailProviderConfigured()
+    {
+        return !string.IsNullOrWhiteSpace(_options.ResendApiKey) &&
+               !string.IsNullOrWhiteSpace(_options.FromAddress);
     }
 }
