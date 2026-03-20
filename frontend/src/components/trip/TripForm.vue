@@ -1,5 +1,6 @@
 ﻿<script setup lang="ts">
 import { computed, inject, onMounted, reactive, ref, watch } from 'vue'
+import AutoComplete from 'primevue/autocomplete'
 import Button from 'primevue/button'
 import Calendar from 'primevue/calendar'
 import Dropdown from 'primevue/dropdown'
@@ -30,10 +31,13 @@ import {
 } from './tripEstimation'
 import type { TransportMode } from './tripEstimation'
 import {
+  type CitySearchSuggestion,
   getAllCountries,
   getCitiesByCountry,
   getDistanceBetweenCities,
-  localizeCityName
+  localizeCityName,
+  resolveCityTimeZone,
+  searchCitiesWorldwide
 } from '../../services/api/geodataApi'
 import { getTrainJourney } from '../../services/api/transportApi'
 
@@ -47,6 +51,8 @@ interface DayActivity {
   estimatedCost?: boolean
   estimatedTime?: boolean
   transportMode?: TransportMode | null
+  endDayOffset?: number
+  timeNote?: string
 }
 
 interface DayAccommodation {
@@ -106,6 +112,9 @@ const countryOptions = ref<string[]>([...fallbackCountryOptions])
 const citiesByCountry = reactive<Record<string, string[]>>({ ...fallbackCitiesByCountry })
 const fetchedCountries = reactive<Record<string, boolean>>({})
 const cityLoading = ref(false)
+const startCitySearching = ref(false)
+const startCitySuggestions = ref<CitySearchSuggestion[]>([])
+const startCityInputValue = ref<string | CitySearchSuggestion>('')
 const segmentDistances = reactive<Record<string, number | null>>({})
 const segmentLoading = reactive<Record<string, boolean>>({})
 const segmentSignatures = reactive<Record<string, string>>({})
@@ -199,7 +208,6 @@ const routeCityOptions = computed(() => {
   return getOrderedCityOptions(form.countries)
 })
 
-const selectedCitySet = computed(() => new Set(selectedCityOptions.value))
 const maxStayPreferenceRows = computed(() => {
   const dayCount = Math.max(0, Math.floor(form.numberOfDays ?? 0))
   const cityLimit = Math.max(1, routeCityOptions.value.length)
@@ -280,25 +288,21 @@ watch(
   { immediate: true }
 )
 
-watch(selectedCityOptions, () => {
-  if (!allCitiesLoaded.value) return
-  form.cityStops = form.cityStops.map((dayStops) =>
-    dayStops.map((city) => (selectedCitySet.value.has(city) ? city : ''))
-  )
-  if (form.routeStartCity && !selectedCitySet.value.has(form.routeStartCity)) {
-    form.routeStartCity = ''
-  }
-  if (form.routeEndCity && !selectedCitySet.value.has(form.routeEndCity)) {
-    form.routeEndCity = ''
-  }
-})
+watch(
+  () => form.routeStartCity,
+  (city) => {
+    if (typeof startCityInputValue.value === 'string' && startCityInputValue.value === city) return
+    startCityInputValue.value = city
+  },
+  { immediate: true }
+)
 
 watch(
   routeCityOptions,
-  (cities) => {
+  () => {
     const preservedPreferences = form.stayPreferences
       .map((preference) => ({
-        city: preference.city && cities.includes(preference.city) ? preference.city : '',
+        city: preference.city.trim(),
         days: preference.days ?? null
       }))
       .filter((preference) => preference.city || preference.days !== null)
@@ -367,18 +371,6 @@ function hasActiveStayPreferences() {
   return form.stayPreferences.some((preference) => preference.city.trim().length > 0)
 }
 
-function pruneCitiesByCountries(countries: string[]) {
-  const allowed = new Set<string>()
-  countries.forEach((country) => {
-    const cities = getMergedCitiesForCountry(country)
-    cities.forEach((city) => allowed.add(city))
-  })
-
-  form.cityStops = form.cityStops.map((dayStops) =>
-    dayStops.map((city) => (allowed.has(city) ? city : ''))
-  )
-}
-
 function resetTripDataForCountryChange() {
   form.name = ''
   form.startDate = new Date()
@@ -422,7 +414,6 @@ watch(
     if (countriesToFetch.length === 0) {
       cityLoading.value = false
       cityLoaderVisible.value = false
-      pruneCitiesByCountries(countries)
       return
     }
 
@@ -443,7 +434,6 @@ watch(
       )
     } finally {
       cityLoading.value = false
-      pruneCitiesByCountries(countries)
       cityLoaderTimer = setTimeout(() => {
         cityLoaderVisible.value = !allCitiesLoaded.value
       }, 450)
@@ -505,12 +495,11 @@ const canSubmit = computed(
     form.numberOfDays !== null &&
     form.numberOfDays >= 1 &&
     allCitiesLoaded.value &&
-    selectedCityOptions.value.length > 0 &&
     form.cityStops.length === Math.floor(form.numberOfDays) &&
     form.cityStops.every(
       (dayStops) => {
         const selectedCities = dayStops.map((city) => city.trim()).filter((city) => city.length > 0)
-        return selectedCities.length > 0 && selectedCities.every((city) => selectedCitySet.value.has(city))
+        return selectedCities.length > 0
       }
     ) &&
     form.dayActivities.every((activities, dayIndex) =>
@@ -529,7 +518,6 @@ const submitBlockers = computed(() => {
   if (form.startDate === null) blockers.push('Choose a start date.')
   if (form.numberOfDays === null || form.numberOfDays < 1) blockers.push('Enter at least 1 day.')
   if (!allCitiesLoaded.value) blockers.push('Wait for cities to finish loading.')
-  if (selectedCityOptions.value.length === 0) blockers.push('No cities are available for the selected country.')
 
   if (form.numberOfDays !== null && form.numberOfDays >= 1) {
     if (form.cityStops.length !== Math.floor(form.numberOfDays)) {
@@ -537,7 +525,7 @@ const submitBlockers = computed(() => {
     } else if (
       !form.cityStops.every((dayStops) => {
         const selectedCities = dayStops.map((city) => city.trim()).filter((city) => city.length > 0)
-        return selectedCities.length > 0 && selectedCities.every((city) => selectedCitySet.value.has(city))
+        return selectedCities.length > 0
       })
     ) {
       blockers.push('Each day needs at least one valid city.')
@@ -720,6 +708,56 @@ interface CityCandidate {
   preferredStay: boolean
 }
 
+async function handleStartCityComplete(event: { query: string }) {
+  const query = event.query.trim()
+  if (query.length < 2) {
+    startCitySuggestions.value = []
+    return
+  }
+
+  startCitySearching.value = true
+  try {
+    startCitySuggestions.value = await searchCitiesWorldwide(query, currentLanguage.value)
+  } catch {
+    startCitySuggestions.value = []
+  } finally {
+    startCitySearching.value = false
+  }
+}
+
+function normalizeCityInput(value: string | CitySearchSuggestion | null) {
+  if (typeof value === 'string') return value
+  return value?.name ?? ''
+}
+
+function handleStartCityInput(value: string | CitySearchSuggestion | null) {
+  startCityInputValue.value = value ?? ''
+  form.routeStartCity = normalizeCityInput(value)
+}
+
+function handleStartCitySelect(event: { value: CitySearchSuggestion }) {
+  form.routeStartCity = event.value.name
+  startCityInputValue.value = event.value
+}
+
+function handleEndCityInput(value: string | CitySearchSuggestion | null) {
+  form.routeEndCity = normalizeCityInput(value)
+}
+
+function handleStayPreferenceCityInput(preference: StayPreference, value: string | CitySearchSuggestion | null) {
+  preference.city = normalizeCityInput(value)
+}
+
+function isCityInSelectedCountries(city: string) {
+  const normalizedCity = city.trim().toLowerCase()
+  if (!normalizedCity) return false
+
+  return form.countries.some((country) => {
+    const mergedCities = getMergedCitiesForCountry(country)
+    return mergedCities.some((candidate) => candidate.trim().toLowerCase() === normalizedCity)
+  })
+}
+
 function getCityCandidates() {
   const candidates: CityCandidate[] = []
   const seen = new Set<string>()
@@ -776,9 +814,14 @@ function getCityCandidates() {
     })
   })
 
-  ;[form.routeStartCity, form.routeEndCity].forEach((city) => {
+  const startCity = form.routeStartCity.trim()
+  const endCity = form.routeEndCity.trim()
+  const isRoundTrip = startCity.length > 0 && startCity === endCity
+
+  ;[startCity, endCity].forEach((city) => {
     const trimmedCity = city.trim()
     if (!trimmedCity) return
+    if (isRoundTrip && !isCityInSelectedCountries(trimmedCity)) return
     const key = trimmedCity.toLowerCase()
     if (seen.has(key)) {
       const existingCandidate = candidates.find((candidate) => candidate.name.toLowerCase() === key)
@@ -1141,15 +1184,40 @@ function applySelectedRouteEndpoints(dayStops: string[][]) {
 
   if (startCity) {
     normalized[0] = normalized[0]?.length ? [...normalized[0]] : ['']
-    normalized[0][0] = startCity
+    const existingStartIndex = normalized[0].findIndex((city) => city.trim() === startCity)
+    if (existingStartIndex > 0) {
+      normalized[0].splice(existingStartIndex, 1)
+    }
+
+    if (normalized[0][0]?.trim() !== startCity) {
+      if (normalized[0][0]?.trim().length) {
+        normalized[0].unshift(startCity)
+      } else {
+        normalized[0][0] = startCity
+      }
+    }
+
+    normalized[0] = normalized[0].filter((city) => city.trim().length > 0).slice(0, 4)
   }
 
   if (endCity) {
     const lastDayIndex = normalized.length - 1
     const lastDayStops = normalized[lastDayIndex]?.length ? [...normalized[lastDayIndex]] : ['']
+    const existingEndIndex = lastDayStops.findIndex((city) => city.trim() === endCity)
+    if (existingEndIndex >= 0 && existingEndIndex < lastDayStops.length - 1) {
+      lastDayStops.splice(existingEndIndex, 1)
+    }
+
     const lastStopIndex = Math.max(0, lastDayStops.length - 1)
-    lastDayStops[lastStopIndex] = endCity
-    normalized[lastDayIndex] = lastDayStops
+    if (lastDayStops[lastStopIndex]?.trim() !== endCity) {
+      if (lastDayStops[lastStopIndex]?.trim().length) {
+        lastDayStops.push(endCity)
+      } else {
+        lastDayStops[lastStopIndex] = endCity
+      }
+    }
+
+    normalized[lastDayIndex] = lastDayStops.filter((city) => city.trim().length > 0).slice(-4)
   }
 
   for (let dayIndex = 1; dayIndex < normalized.length; dayIndex += 1) {
@@ -1211,6 +1279,98 @@ function toIsoDateTime(date: string, time: string) {
   return `${date}T${time}:00`
 }
 
+function addDaysToIsoDate(date: string, dayOffset: number) {
+  const nextDate = new Date(`${date}T00:00:00`)
+  nextDate.setDate(nextDate.getDate() + dayOffset)
+  return toIsoDate(nextDate)
+}
+
+function getTimeZoneOffsetMinutes(timeZone: string, date: Date) {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    timeZoneName: 'shortOffset',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  })
+  const zonePart = formatter.formatToParts(date).find((part) => part.type === 'timeZoneName')?.value ?? 'GMT'
+  if (zonePart === 'GMT' || zonePart === 'UTC') return 0
+
+  const match = zonePart.match(/GMT([+-])(\d{1,2})(?::?(\d{2}))?/)
+  if (!match) return 0
+
+  const sign = match[1] === '-' ? -1 : 1
+  const hours = Number(match[2] ?? '0')
+  const minutes = Number(match[3] ?? '0')
+  return sign * (hours * 60 + minutes)
+}
+
+function formatTimeZoneLabel(timeZone: string) {
+  const parts = timeZone.split('/')
+  return parts[parts.length - 1]?.replace(/_/g, ' ') ?? timeZone
+}
+
+async function getArrivalTimeInfo(
+  fromCity: string,
+  toCity: string,
+  departureDate: string,
+  departureMinutes: number,
+  durationMinutes: number
+) {
+  const [fromTimeZone, toTimeZone] = await Promise.all([
+    resolveCityTimeZone(fromCity, form.countries, currentLanguage.value),
+    resolveCityTimeZone(toCity, form.countries, currentLanguage.value)
+  ])
+
+  if (!fromTimeZone || !toTimeZone) {
+    return {
+      endTime: minutesToTime(departureMinutes + durationMinutes),
+      endDayOffset: Math.floor((departureMinutes + durationMinutes) / (24 * 60)),
+      timeNote: ''
+    }
+  }
+
+  const departureDateTime = new Date(`${departureDate}T00:00:00`)
+  departureDateTime.setMinutes(departureMinutes)
+
+  const departureOffsetMinutes = getTimeZoneOffsetMinutes(fromTimeZone, departureDateTime)
+  const departureUtcMs = departureDateTime.getTime() - departureOffsetMinutes * 60_000
+  const arrivalUtcDate = new Date(departureUtcMs + durationMinutes * 60_000)
+  const arrivalOffsetMinutes = getTimeZoneOffsetMinutes(toTimeZone, arrivalUtcDate)
+  const arrivalLocalDate = new Date(arrivalUtcDate.getTime() + arrivalOffsetMinutes * 60_000)
+
+  const arrivalHours = arrivalLocalDate.getUTCHours()
+  const arrivalMinutes = arrivalLocalDate.getUTCMinutes()
+  const endTime = `${`${arrivalHours}`.padStart(2, '0')}:${`${arrivalMinutes}`.padStart(2, '0')}`
+  const departureLocalDayIndex = Math.floor(departureMinutes / (24 * 60))
+  const arrivalLocalDayIndex = Math.floor(
+    (arrivalLocalDate.getUTCDate() - 1)
+  )
+  const departureCalendarDate = new Date(`${departureDate}T00:00:00`)
+  const arrivalCalendarDate = new Date(Date.UTC(
+    arrivalLocalDate.getUTCFullYear(),
+    arrivalLocalDate.getUTCMonth(),
+    arrivalLocalDate.getUTCDate()
+  ))
+  const endDayOffset = Math.max(
+    0,
+    Math.round((arrivalCalendarDate.getTime() - departureCalendarDate.getTime()) / (24 * 60 * 60 * 1000)) - departureLocalDayIndex
+  )
+
+  return {
+    endTime,
+    endDayOffset,
+    timeNote:
+      endDayOffset > 0 || fromTimeZone !== toTimeZone
+        ? `Arrival shown in ${formatTimeZoneLabel(toTimeZone)} local time${endDayOffset > 0 ? ` (+${endDayOffset} day${endDayOffset > 1 ? 's' : ''})` : ''}.`
+        : ''
+  }
+}
+
 function formatApiTime(value: string | null | undefined) {
   if (!value) return null
   const parsed = new Date(value)
@@ -1241,7 +1401,9 @@ function addGeneratedActivity(
     costDetails: '',
     estimatedCost: false,
     estimatedTime: false,
-    transportMode: null
+    transportMode: null,
+    endDayOffset: 0,
+    timeNote: ''
   })
 
   return startMinutes + durationMinutes
@@ -1485,6 +1647,8 @@ async function buildAutoActivities(dayStops: string[][]) {
         let transportEndMinutes = currentMinutes + getTransportDurationMinutes(transportMode, distance)
         let estimatedTime = true
         let hasRealTransportPrice = false
+        let endDayOffset = 0
+        let timeNote = ''
         let transportCost = estimateTransportCost(
           transportMode,
           distance,
@@ -1563,20 +1727,43 @@ async function buildAutoActivities(dayStops: string[][]) {
           }
         }
 
+        const isFinalArrivalLeg =
+          dayIndex === dayStops.length - 1 &&
+          cityIndex === cities.length - 2 &&
+          endCity.length > 0 &&
+          nextCity === endCity
+        let displayedEndTime = minutesToTime(Math.min(Math.max(transportStartMinutes, transportEndMinutes), dayEndMinutes))
+
+        if (isFinalArrivalLeg && itineraryDays.value[dayIndex]) {
+          const arrivalInfo = await getArrivalTimeInfo(
+            city,
+            nextCity,
+            itineraryDays.value[dayIndex].isoDate,
+            transportStartMinutes,
+            Math.max(0, transportEndMinutes - transportStartMinutes)
+          )
+          transportDetail = arrivalInfo.timeNote ? `${transportDetail} (${arrivalInfo.timeNote})` : transportDetail
+          displayedEndTime = arrivalInfo.endTime
+          endDayOffset = arrivalInfo.endDayOffset
+          timeNote = arrivalInfo.timeNote
+        }
+
         transportStartMinutes = Math.min(transportStartMinutes, dayEndMinutes)
         transportEndMinutes = Math.min(Math.max(transportStartMinutes, transportEndMinutes), dayEndMinutes)
 
         if (transportStartMinutes < dayEndMinutes) {
           activities.push({
             startTime: minutesToTime(transportStartMinutes),
-            endTime: minutesToTime(transportEndMinutes),
+            endTime: displayedEndTime,
             type: 'transport',
             name: transportDetail,
             cost: transportCost,
             costDetails: transportCostDetails,
             estimatedCost: transportMode !== 'walk' && !hasRealTransportPrice,
             estimatedTime,
-            transportMode
+            transportMode,
+            endDayOffset,
+            timeNote
           })
           finalReachedCity = nextCity
           if (!reachedCities.includes(nextCity)) {
@@ -1789,8 +1976,8 @@ function removeCityStop(dayIndex: number, cityIndex: number) {
   syncDayBoundaries(dayIndex)
 }
 
-function handleCityStopChange(dayIndex: number, cityIndex: number, value: string) {
-  form.cityStops[dayIndex][cityIndex] = value
+function handleCityStopChange(dayIndex: number, cityIndex: number, value: string | CitySearchSuggestion | null) {
+  form.cityStops[dayIndex][cityIndex] = normalizeCityInput(value)
   syncDayBoundaries(dayIndex)
 }
 
@@ -1808,7 +1995,9 @@ function addActivity(dayIndex: number) {
     costDetails: '',
     estimatedCost: false,
     estimatedTime: false,
-    transportMode: null
+    transportMode: null,
+    endDayOffset: 0,
+    timeNote: ''
   })
 
   expandedDays.value[dayIndex] = true
@@ -1865,10 +2054,8 @@ function getActivityDurationMinutes(activity: DayActivity) {
   if (!activity.startTime || !activity.endTime) return 0
 
   const startMinutes = timeToMinutes(activity.startTime)
-  let endMinutes = timeToMinutes(activity.endTime)
-  if (endMinutes < startMinutes) {
-    endMinutes += 24 * 60
-  }
+  let endMinutes = timeToMinutes(activity.endTime) + (activity.endDayOffset ?? 0) * 24 * 60
+  if ((activity.endDayOffset ?? 0) === 0 && endMinutes < startMinutes) endMinutes += 24 * 60
 
   return Math.max(0, endMinutes - startMinutes)
 }
@@ -1881,6 +2068,7 @@ function recalculateActivityTimes(dayIndex: number) {
     const durationMinutes = getActivityDurationMinutes(activity)
     activity.startTime = minutesToTime(currentMinutes)
     activity.endTime = minutesToTime(currentMinutes + durationMinutes)
+    activity.endDayOffset = Math.floor((currentMinutes + durationMinutes) / (24 * 60))
     currentMinutes += durationMinutes
   })
 }
@@ -1950,6 +2138,7 @@ function syncActivitiesFrom(dayIndex: number, startIndex: number) {
 
     if (!activity.endTime || activity.endTime < activity.startTime) {
       activity.endTime = activity.startTime
+      activity.endDayOffset = 0
     }
   }
 }
@@ -1964,6 +2153,7 @@ function handleActivityStartChange(dayIndex: number, activityIndex: number, valu
   activity.startTime = nextStart
   if (!activity.endTime || activity.endTime < activity.startTime) {
     activity.endTime = activity.startTime
+    activity.endDayOffset = 0
   }
 
   syncActivitiesFrom(dayIndex, activityIndex + 1)
@@ -1979,16 +2169,18 @@ function handleActivityEndChange(dayIndex: number, activityIndex: number, value:
 
   if (!value) {
     activity.endTime = activity.startTime
+    activity.endDayOffset = 0
     return
   }
 
   activity.endTime = value < activity.startTime ? activity.startTime : value
+  activity.endDayOffset = 0
   syncActivitiesFrom(dayIndex, activityIndex + 1)
 }
 
 function isValidTimeRange(dayIndex: number, activityIndex: number, activity: DayActivity) {
   if (activity.startTime.length === 0 || activity.endTime.length === 0) return false
-  if (activity.endTime < activity.startTime) return false
+  if ((activity.endDayOffset ?? 0) === 0 && activity.endTime < activity.startTime) return false
 
   const minStart = getMinStartTime(dayIndex, activityIndex)
   return !minStart || activity.startTime >= minStart
@@ -2004,15 +2196,14 @@ function getActivityDurationLabel(activity: DayActivity) {
   }
 
   let startTotal = startHour * 60 + startMinute
-  let endTotal = endHour * 60 + endMinute
-  if (endTotal < startTotal) endTotal += 24 * 60
+  let endTotal = endHour * 60 + endMinute + (activity.endDayOffset ?? 0) * 24 * 60
+  if ((activity.endDayOffset ?? 0) === 0 && endTotal < startTotal) endTotal += 24 * 60
   const diff = endTotal - startTotal
 
   const hours = Math.floor(diff / 60)
   const minutes = diff % 60
-  if (hours && minutes) return `${hours}h ${minutes}m`
-  if (hours) return `${hours}h`
-  return `${minutes}m`
+  const baseLabel = hours && minutes ? `${hours}h ${minutes}m` : hours ? `${hours}h` : `${minutes}m`
+  return (activity.endDayOffset ?? 0) > 0 ? `${baseLabel} (+${activity.endDayOffset} day)` : baseLabel
 }
 
 function handleCityDragStart(event: DragEvent, dayIndex: number, cityIndex: number) {
@@ -2165,7 +2356,10 @@ function isActivitiesLoading(dayIndex: number) {
 function handleSubmit() {
   if (!canSubmit.value || props.isSaving) return
 
-  const endDate = itineraryDays.value[itineraryDays.value.length - 1].isoDate
+  const lastItineraryDate = itineraryDays.value[itineraryDays.value.length - 1].isoDate
+  const lastDayActivities = form.dayActivities[itineraryDays.value.length - 1] ?? []
+  const endDayOffset = lastDayActivities.reduce((maxOffset, activity) => Math.max(maxOffset, activity.endDayOffset ?? 0), 0)
+  const endDate = addDaysToIsoDate(lastItineraryDate, endDayOffset)
   const startDate = toIsoDate(form.startDate as Date)
 
   emit('submit', {
@@ -2193,15 +2387,17 @@ function handleSubmit() {
             ? normalized
             : undefined
         })(),
-        activities: form.dayActivities[item.index].map((activity) => ({
-          startTime: activity.startTime,
-          endTime: activity.endTime,
-          type: activity.type,
-          details: activity.name.trim(),
-          cost: Number(activity.cost ?? 0)
+          activities: form.dayActivities[item.index].map((activity) => ({
+            startTime: activity.startTime,
+            endTime: activity.endTime,
+            type: activity.type,
+            details: activity.name.trim(),
+            cost: Number(activity.cost ?? 0),
+            endDayOffset: activity.endDayOffset ?? 0,
+            timeNote: activity.timeNote?.trim() ? activity.timeNote.trim() : undefined
+          }))
         }))
-      }))
-    }
+      }
   })
 }
 
@@ -2307,27 +2503,38 @@ watch(
         <div class="date-days-row">
           <div class="field-group compact-field">
             <label>{{ props.texts.startCity }}</label>
-            <Dropdown
-              v-model="form.routeStartCity"
-              :options="routeCityOptions"
+            <AutoComplete
+              :model-value="startCityInputValue"
+              @update:model-value="handleStartCityInput"
+              :suggestions="startCitySuggestions"
+              option-label="label"
               :placeholder="props.texts.startCity"
-              :filter="true"
+              :force-selection="false"
               :virtual-scroller-options="{ itemSize: 36 }"
+              @complete="handleStartCityComplete"
+              @item-select="handleStartCitySelect"
               :disabled="!hasSelectedCountry"
-              :loading="cityLoading"
+              :dropdown="true"
+              :loading="startCitySearching"
+              class="city-picker"
             />
           </div>
 
           <div class="field-group compact-field">
             <label>{{ props.texts.endCity }}</label>
-            <Dropdown
-              v-model="form.routeEndCity"
-              :options="routeCityOptions"
+            <AutoComplete
+              :model-value="form.routeEndCity"
+              @update:model-value="handleEndCityInput"
+              :suggestions="startCitySuggestions"
+              option-label="label"
               :placeholder="props.texts.endCity"
-              :filter="true"
+              :force-selection="false"
               :virtual-scroller-options="{ itemSize: 36 }"
+              @complete="handleStartCityComplete"
+              class="city-picker"
               :disabled="!hasSelectedCountry"
-              :loading="cityLoading"
+              :dropdown="true"
+              :loading="startCitySearching"
             />
           </div>
         </div>
@@ -2375,13 +2582,19 @@ watch(
                   :key="`stay-preference-primary-${index}`"
                   class="stay-preference-row"
                 >
-                  <Dropdown
-                    v-model="preference.city"
-                    :options="routeCityOptions"
+                  <AutoComplete
+                    :model-value="preference.city"
+                    @update:model-value="handleStayPreferenceCityInput(preference, $event as string | CitySearchSuggestion | null)"
+                    :suggestions="startCitySuggestions"
+                    option-label="label"
                     :placeholder="props.texts.city"
-                    :filter="true"
+                    :force-selection="false"
                     :virtual-scroller-options="{ itemSize: 36 }"
+                    @complete="handleStartCityComplete"
+                    class="city-picker"
                     :disabled="!hasSelectedCountry"
+                    :dropdown="true"
+                    :loading="startCitySearching"
                   />
                   <InputNumber
                     v-model="preference.days"
@@ -2408,13 +2621,19 @@ watch(
                   :key="`stay-preference-overflow-${overflowIndex + 2}`"
                   class="stay-preference-row"
                 >
-                  <Dropdown
-                    v-model="preference.city"
-                    :options="routeCityOptions"
+                  <AutoComplete
+                    :model-value="preference.city"
+                    @update:model-value="handleStayPreferenceCityInput(preference, $event as string | CitySearchSuggestion | null)"
+                    :suggestions="startCitySuggestions"
+                    option-label="label"
                     :placeholder="props.texts.city"
-                    :filter="true"
+                    :force-selection="false"
                     :virtual-scroller-options="{ itemSize: 36 }"
+                    @complete="handleStartCityComplete"
+                    class="city-picker"
                     :disabled="!hasSelectedCountry"
+                    :dropdown="true"
+                    :loading="startCitySearching"
                   />
                   <InputNumber
                     v-model="preference.days"
@@ -2483,16 +2702,19 @@ watch(
                       @dragstart="handleCityDragStart($event, item.index, cityIndex)"
                       @dragend="handleCityDragEnd"
                     />
-                    <Dropdown
+                    <AutoComplete
                       :model-value="form.cityStops[item.index][cityIndex]"
-                      @update:model-value="handleCityStopChange(item.index, cityIndex, String($event ?? ''))"
-                      :options="selectedCityOptions"
+                      @update:model-value="handleCityStopChange(item.index, cityIndex, $event as string | CitySearchSuggestion | null)"
+                      :suggestions="startCitySuggestions"
+                      option-label="label"
                       :placeholder="allCitiesLoaded ? props.texts.city : props.texts.loadingCities"
-                      :filter="true"
+                      :force-selection="false"
                       :virtual-scroller-options="{ itemSize: 36 }"
-                      class="city-select"
+                      @complete="handleStartCityComplete"
+                      class="city-select city-picker"
                       :disabled="!allCitiesLoaded"
-                      :loading="!allCitiesLoaded"
+                      :dropdown="true"
+                      :loading="!allCitiesLoaded || startCitySearching"
                       :style="{ width: getCitySelectWidth(form.cityStops[item.index][cityIndex]) }"
                     />
                     <Button
@@ -2573,7 +2795,14 @@ watch(
                   />
                 </div>
                 <div class="activity-time-field">
-                  <small>{{ props.texts.activityEndTime }}</small>
+                  <small class="activity-time-label">
+                    <span>{{ props.texts.activityEndTime }}</span>
+                    <i
+                      v-if="activity.timeNote"
+                      v-tooltip.bottom="activity.timeNote"
+                      class="pi pi-exclamation-triangle activity-warning-icon"
+                    />
+                  </small>
                   <InputText
                     :model-value="activity.endTime"
                     type="time"
@@ -2720,3 +2949,68 @@ watch(
 	    </aside>
   </div>
 </template>
+
+<style scoped>
+:deep(.p-autocomplete .p-autocomplete-dropdown) {
+  width: 2.5rem;
+  background: #fff1f7;
+  border-color: var(--tm-border);
+  border-left: none;
+  color: var(--tm-accent-strong);
+}
+
+:deep(.p-autocomplete .p-autocomplete-dropdown:hover) {
+  background: #ffe1ee;
+  border-color: var(--tm-border-strong);
+  color: #8f0f46;
+}
+
+:deep(.p-autocomplete .p-autocomplete-dropdown:focus) {
+  box-shadow: none;
+}
+
+:deep(.p-autocomplete .p-autocomplete-input) {
+  border-right: 0;
+}
+
+:deep(.p-autocomplete .p-autocomplete-input:enabled:focus) {
+  box-shadow: none;
+  border-color: var(--tm-accent);
+}
+
+:deep(.p-autocomplete.p-focus .p-autocomplete-input) {
+  border-color: var(--tm-accent);
+}
+
+:deep(.p-autocomplete-panel) {
+  border: 1px solid var(--tm-border);
+  background: linear-gradient(180deg, #fffafb 0%, #fff4f8 100%);
+  box-shadow: 0 14px 28px rgba(190, 24, 93, 0.14);
+}
+
+:deep(.p-autocomplete-panel .p-autocomplete-items .p-autocomplete-item) {
+  color: var(--tm-text);
+}
+
+:deep(.p-autocomplete-panel .p-autocomplete-items .p-autocomplete-item:not(.p-highlight):not(.p-disabled):hover) {
+  background: #ffe6f1;
+  color: var(--tm-accent-strong);
+}
+
+:deep(.p-autocomplete-panel .p-autocomplete-items .p-autocomplete-item.p-highlight) {
+  background: #ffd2e5;
+  color: var(--tm-accent-strong);
+}
+
+:deep(.city-picker .p-dropdown-trigger) {
+  background: #fff1f7;
+  border-left: none;
+  color: var(--tm-accent-strong);
+}
+
+:deep(.city-picker:not(.p-disabled):hover .p-dropdown-trigger) {
+  background: #ffe1ee;
+  color: #8f0f46;
+}
+
+</style>

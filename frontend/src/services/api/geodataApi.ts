@@ -13,10 +13,19 @@ interface CountriesNowCitiesResponse {
   data: string[]
 }
 
+export interface CitySearchSuggestion {
+  name: string
+  country: string
+  label: string
+}
+
 const citiesCache = new Map<string, string[]>()
+const citySearchCache = new Map<string, CitySearchSuggestion[]>()
 const coordinatesCache = new Map<string, { lat: number; lon: number } | null>()
+const timeZoneCache = new Map<string, string | null>()
 const distanceCache = new Map<string, number | null>()
 const pendingCoordinatesCache = new Map<string, Promise<{ lat: number; lon: number } | null>>()
+const pendingTimeZoneCache = new Map<string, Promise<string | null>>()
 const pendingDistanceCache = new Map<string, Promise<number | null>>()
 let countriesCache: RestCountry[] | null = null
 let pendingCountriesRequest: Promise<RestCountry[]> | null = null
@@ -132,12 +141,59 @@ export async function getCitiesByCountry(country: string, language: Language = '
 }
 
 interface OpenMeteoResult {
+  name?: string
+  country?: string
+  admin1?: string
+  timezone?: string
   latitude: number
   longitude: number
 }
 
 interface OpenMeteoResponse {
   results?: OpenMeteoResult[]
+}
+
+export async function searchCitiesWorldwide(
+  query: string,
+  language: Language = 'en',
+  limit = 8
+): Promise<CitySearchSuggestion[]> {
+  const trimmedQuery = query.trim()
+  if (trimmedQuery.length < 2) return []
+
+  const cacheKey = `${language}::${limit}::${trimmedQuery.toLowerCase()}`
+  const cached = citySearchCache.get(cacheKey)
+  if (cached) return cached
+
+  const geocodingLanguage = geocodingLanguageByUiLanguage[language] ?? 'en'
+  const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(trimmedQuery)}&count=${limit}&language=${geocodingLanguage}&format=json`
+  const { data } = await axios.get<OpenMeteoResponse>(url)
+  const seen = new Set<string>()
+  const suggestions = (data.results ?? [])
+    .map((result) => {
+      const name = result.name?.trim() ?? ''
+      const country = result.country?.trim() ?? ''
+      const region = result.admin1?.trim() ?? ''
+      const labelParts = [name]
+      if (region && region.toLowerCase() !== name.toLowerCase()) labelParts.push(region)
+      if (country) labelParts.push(country)
+
+      return {
+        name,
+        country,
+        label: labelParts.join(', ')
+      }
+    })
+    .filter((suggestion) => suggestion.name.length > 0)
+    .filter((suggestion) => {
+      const key = `${suggestion.name.toLowerCase()}|${suggestion.country.toLowerCase()}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+
+  citySearchCache.set(cacheKey, suggestions)
+  return suggestions
 }
 
 async function getCoordinates(query: string, language: Language = 'en'): Promise<{ lat: number; lon: number } | null> {
@@ -161,6 +217,29 @@ async function getCoordinates(query: string, language: Language = 'en'): Promise
     return await request
   } finally {
     pendingCoordinatesCache.delete(cacheKey)
+  }
+}
+
+async function getTimeZone(query: string, language: Language = 'en'): Promise<string | null> {
+  const cacheKey = `${language}::${query.toLowerCase()}`
+  if (timeZoneCache.has(cacheKey)) return timeZoneCache.get(cacheKey) ?? null
+  const pending = pendingTimeZoneCache.get(cacheKey)
+  if (pending) return pending
+
+  const request = (async () => {
+    const geocodingLanguage = geocodingLanguageByUiLanguage[language] ?? 'en'
+    const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=1&language=${geocodingLanguage}&format=json`
+    const { data } = await axios.get<OpenMeteoResponse>(url)
+    const timeZone = data.results?.[0]?.timezone?.trim() ?? null
+    timeZoneCache.set(cacheKey, timeZone)
+    return timeZone
+  })()
+
+  pendingTimeZoneCache.set(cacheKey, request)
+  try {
+    return await request
+  } finally {
+    pendingTimeZoneCache.delete(cacheKey)
   }
 }
 
@@ -189,6 +268,19 @@ async function resolveCityCoordinates(
   }
 
   return getCoordinates(city, language)
+}
+
+export async function resolveCityTimeZone(
+  city: string,
+  countries: string[],
+  language: Language = 'en'
+): Promise<string | null> {
+  for (const country of countries) {
+    const result = await getTimeZone(`${city}, ${country}`, language)
+    if (result) return result
+  }
+
+  return getTimeZone(city, language)
 }
 
 export async function getDistanceBetweenCities(

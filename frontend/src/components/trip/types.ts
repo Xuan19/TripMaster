@@ -6,6 +6,8 @@ export interface TripDayActivityDetails {
   type: ActivityType
   details: string
   cost: number
+  endDayOffset?: number
+  timeNote?: string
 }
 
 export interface TripDayAccommodationDetails {
