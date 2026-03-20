@@ -59,7 +59,11 @@ async function submit() {
         return
       }
       const response = await register(trimmedUsername, trimmedEmail, password.value)
-      emit('authenticated', response.username)
+      successMessage.value = response.verificationToken
+        ? `${response.message} Verification token: ${response.verificationToken}`
+        : response.message
+      mode.value = 'login'
+      password.value = ''
       return
     }
 

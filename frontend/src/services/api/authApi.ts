@@ -8,6 +8,11 @@ interface AuthResponse {
   email: string
 }
 
+interface RegisterResponse {
+  message: string
+  verificationToken?: string
+}
+
 interface ForgotPasswordResponse {
   message: string
   resetToken?: string
@@ -18,8 +23,7 @@ const authApi = axios.create({
 })
 
 export async function register(username: string, email: string, password: string) {
-  const { data } = await authApi.post<AuthResponse>('/auth/register', { username, email, password })
-  setAuthSession(data.token, data.username)
+  const { data } = await authApi.post<RegisterResponse>('/auth/register', { username, email, password })
   return data
 }
 

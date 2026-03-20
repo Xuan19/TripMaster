@@ -28,6 +28,14 @@ public class TripMasterDbContext : DbContext
             .HasMaxLength(256);
 
         modelBuilder.Entity<User>()
+            .Property(u => u.EmailVerificationToken)
+            .HasMaxLength(128);
+
+        modelBuilder.Entity<User>()
+            .Property(u => u.PasswordResetToken)
+            .HasMaxLength(128);
+
+        modelBuilder.Entity<User>()
             .HasIndex(u => u.Username)
             .IsUnique();
 

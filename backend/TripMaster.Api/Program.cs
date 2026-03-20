@@ -36,7 +36,9 @@ builder.Services.AddDbContext<TripMasterDbContext>(options =>
 });
 builder.Services.AddScoped<DatabaseInitializer>();
 builder.Services.Configure<TransportRestOptions>(builder.Configuration.GetSection(TransportRestOptions.SectionName));
+builder.Services.Configure<EmailOptions>(builder.Configuration.GetSection(EmailOptions.SectionName));
 builder.Services.AddHttpClient<TransportRestJourneyService>();
+builder.Services.AddScoped<EmailVerificationService>();
 
 var jwtKey = builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("Missing Jwt:Key configuration.");
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "TripMaster.Api";

@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -18,15 +19,20 @@ public class AuthController : ControllerBase
 {
     private readonly TripMasterDbContext _db;
     private readonly IConfiguration _configuration;
+    private readonly EmailVerificationService _emailVerificationService;
 
-    public AuthController(TripMasterDbContext db, IConfiguration configuration)
+    public AuthController(
+        TripMasterDbContext db,
+        IConfiguration configuration,
+        EmailVerificationService emailVerificationService)
     {
         _db = db;
         _configuration = configuration;
+        _emailVerificationService = emailVerificationService;
     }
 
     [HttpPost("register")]
-    public async Task<ActionResult<AuthResponse>> Register(RegisterRequest request)
+    public async Task<ActionResult<RegisterResponse>> Register(RegisterRequest request, CancellationToken cancellationToken)
     {
         var normalizedUsername = request.Username.Trim();
         var normalizedEmail = request.Email.Trim().ToLowerInvariant();
@@ -47,17 +53,22 @@ public class AuthController : ControllerBase
         {
             Username = normalizedUsername,
             Email = normalizedEmail,
-            PasswordHash = PasswordHasher.HashPassword(request.Password)
+            PasswordHash = PasswordHasher.HashPassword(request.Password),
+            IsEmailVerified = false,
+            EmailVerificationToken = Convert.ToHexString(RandomNumberGenerator.GetBytes(24)),
+            EmailVerificationTokenExpiresUtc = DateTime.UtcNow.AddHours(24)
         };
 
         _db.Users.Add(user);
-        await _db.SaveChangesAsync();
+        await _db.SaveChangesAsync(cancellationToken);
+        await _emailVerificationService.SendVerificationEmailAsync(user, cancellationToken);
 
-        return Ok(new AuthResponse
+        return Accepted(new RegisterResponse
         {
-            Username = user.Username,
-            Email = user.Email,
-            Token = GenerateToken(user)
+            Message = "Account created. Please confirm your email before signing in.",
+            VerificationToken = _emailVerificationService.ShouldExposeVerificationToken()
+                ? user.EmailVerificationToken
+                : null
         });
     }
 
@@ -70,6 +81,14 @@ public class AuthController : ControllerBase
         if (user is null || !PasswordHasher.VerifyPassword(request.Password, user.PasswordHash))
         {
             return Unauthorized(new { message = "Invalid credentials." });
+        }
+
+        if (!user.IsEmailVerified)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new
+            {
+                message = "Please confirm your email before signing in."
+            });
         }
 
         return Ok(new AuthResponse
@@ -103,6 +122,37 @@ public class AuthController : ControllerBase
         }
 
         return Ok(new { message = "If this email exists, a reset token has been created." });
+    }
+
+    [HttpGet("verify-email")]
+    public async Task<IActionResult> VerifyEmail([FromQuery] string email, [FromQuery] string token)
+    {
+        var normalizedEmail = email.Trim().ToLowerInvariant();
+        var normalizedToken = token.Trim().ToUpperInvariant();
+        var user = await _db.Users.SingleOrDefaultAsync(u => u.Email == normalizedEmail);
+
+        if (user is null ||
+            user.IsEmailVerified ||
+            string.IsNullOrWhiteSpace(user.EmailVerificationToken) ||
+            !string.Equals(user.EmailVerificationToken, normalizedToken, StringComparison.Ordinal) ||
+            user.EmailVerificationTokenExpiresUtc is null ||
+            user.EmailVerificationTokenExpiresUtc < DateTime.UtcNow)
+        {
+            return Content(BuildVerificationHtml(
+                "Email confirmation failed",
+                "This verification link is invalid or expired."),
+                "text/html");
+        }
+
+        user.IsEmailVerified = true;
+        user.EmailVerificationToken = null;
+        user.EmailVerificationTokenExpiresUtc = null;
+        await _db.SaveChangesAsync();
+
+        return Content(BuildVerificationHtml(
+            "Email confirmed",
+            "Your TripMaster email is confirmed. You can now return to the app and sign in."),
+            "text/html");
     }
 
     [HttpPost("reset-password")]
@@ -153,5 +203,32 @@ public class AuthController : ControllerBase
         );
 
         return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    private static string BuildVerificationHtml(string title, string message)
+    {
+        var encodedTitle = HtmlEncoder.Default.Encode(title);
+        var encodedMessage = HtmlEncoder.Default.Encode(message);
+        return $$"""
+            <!doctype html>
+            <html lang="en">
+              <head>
+                <meta charset="utf-8" />
+                <meta name="viewport" content="width=device-width, initial-scale=1" />
+                <title>{{encodedTitle}}</title>
+                <style>
+                  body { font-family: Arial, sans-serif; background: #fff7ed; color: #431407; margin: 0; padding: 32px; }
+                  .card { max-width: 520px; margin: 40px auto; background: white; border: 1px solid #fdba74; border-radius: 16px; padding: 24px; box-shadow: 0 10px 30px rgba(0,0,0,0.08); }
+                  h1 { margin-top: 0; color: #c2410c; }
+                </style>
+              </head>
+              <body>
+                <div class="card">
+                  <h1>{{encodedTitle}}</h1>
+                  <p>{{encodedMessage}}</p>
+                </div>
+              </body>
+            </html>
+            """;
     }
 }
