@@ -240,7 +240,7 @@ void loadTrip()
             <strong>{{ countryList.join(', ') || '-' }}</strong>
           </article>
           <article class="trip-details-card">
-            <small>{{ texts.startDate }}</small>
+            <small>{{ texts.period }}</small>
             <strong>{{ trip.startDate }} -> {{ trip.endDate }}</strong>
           </article>
           <article class="trip-details-card">

@@ -186,7 +186,7 @@ function buildTripDocumentHtml(trip: Trip) {
         <h1>${escapeHtml(trip.name)}</h1>
         <div class="summary">
           <p><strong>${escapeHtml(texts.value.country)}:</strong> ${escapeHtml(trip.country)}</p>
-          <p><strong>${escapeHtml(texts.value.startDate)}:</strong> ${escapeHtml(trip.startDate)} -> ${escapeHtml(trip.endDate)}</p>
+          <p><strong>${escapeHtml(texts.value.period)}:</strong> ${escapeHtml(trip.startDate)} -> ${escapeHtml(trip.endDate)}</p>
           <p><strong>${escapeHtml(texts.value.budgetLabel)}:</strong> ${formatBudget(convertTripAmount(Number(trip.budget), trip))}</p>
         </div>
         ${daySections}
@@ -315,7 +315,7 @@ function formatTripPreview(trip: Trip) {
   const lines = [
     `${trip.name}`,
     `${texts.value.country}: ${trip.country}`,
-    `${texts.value.startDate}: ${trip.startDate} -> ${trip.endDate}`,
+    `${texts.value.period}: ${trip.startDate} -> ${trip.endDate}`,
     `${texts.value.budgetLabel}: ${formatBudget(convertTripAmount(Number(trip.budget), trip))}`
   ]
 
@@ -501,7 +501,7 @@ provide(appUiContextKey, {
 
             <div class="trip-summary">
               <p><strong>{{ texts.country }}:</strong> {{ trip.country }}</p>
-              <p><strong>{{ texts.startDate }}:</strong> {{ trip.startDate }} -> {{ trip.endDate }}</p>
+              <p><strong>{{ texts.period }}:</strong> {{ trip.startDate }} -> {{ trip.endDate }}</p>
               <p><strong>{{ texts.budgetLabel }}:</strong> {{ formatBudget(convertTripAmount(Number(trip.budget), trip)) }}</p>
               <div class="trip-summary-actions">
                 <Button

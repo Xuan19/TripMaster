@@ -14,6 +14,7 @@ export interface UiTexts {
   tripName: string
   country: string
   startDate: string
+  period: string
   numberOfDays: string
   dailyProgram: string
   day: string
@@ -153,6 +154,7 @@ export const translations: Record<Language, UiTexts> = {
     tripName: 'Trip name',
     country: 'Destination country',
     startDate: 'Start date',
+    period: 'Period',
     numberOfDays: 'Number of days',
     dailyProgram: 'Daily program',
     day: 'Day',
@@ -231,6 +233,7 @@ export const translations: Record<Language, UiTexts> = {
     tripName: 'Nom du voyage',
     country: 'Pays de destination',
     startDate: 'Date de debut',
+    period: 'Periode',
     numberOfDays: 'Nombre de jours',
     dailyProgram: 'Programme quotidien',
     day: 'Jour',
@@ -309,6 +312,7 @@ export const translations: Record<Language, UiTexts> = {
     tripName: '旅行名称',
     country: '目的地国家',
     startDate: '开始日期',
+    period: '行程时间',
     numberOfDays: '天数',
     dailyProgram: '每日行程',
     day: '第',
