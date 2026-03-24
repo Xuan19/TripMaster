@@ -741,10 +741,20 @@ body {
 .drag-city-btn.p-button {
   border: none;
   box-shadow: none;
-  width: auto;
-  color: var(--tm-muted);
+  width: 2rem;
+  min-width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border-radius: 999px;
+  color: var(--tm-accent-strong);
+  background: #fff1f7;
   cursor: grab;
-  min-height: auto;
+  min-height: 2rem;
+}
+
+.drag-city-btn.p-button:enabled:hover {
+  background: #ffe1ee;
+  color: #8f0f46;
 }
 
 .remove-city-btn.p-button {
@@ -992,7 +1002,17 @@ body {
   align-items: end;
   min-width: 0;
   width: 100%;
+  padding: 0.7rem 0.75rem;
+  border: 1px solid #f2d3df;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #ffffff 0%, #fff6fa 100%);
+  box-shadow: 0 8px 18px rgba(190, 24, 93, 0.06);
   transition: background-color 0.16s ease, border-color 0.16s ease, opacity 0.16s ease;
+}
+
+.activity-row:hover {
+  border-color: var(--tm-border-strong);
+  background: linear-gradient(180deg, #ffffff 0%, #fff1f7 100%);
 }
 
 .p-tooltip .p-tooltip-arrow {
@@ -1025,7 +1045,8 @@ body {
 }
 
 .activity-row-drop-target {
-  background: #fff3f8;
+  background: linear-gradient(180deg, #fff5fa 0%, #ffe8f2 100%);
+  border-color: #f0abc8;
   border-radius: 12px;
 }
 

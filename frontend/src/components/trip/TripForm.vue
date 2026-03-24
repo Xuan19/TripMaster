@@ -2521,6 +2521,18 @@ function getDistanceLabel(dayIndex: number, segmentIndex: number) {
   return distance !== undefined && distance !== null ? `${distance} km` : 'N/A'
 }
 
+function shouldShowCityConnector(dayIndex: number, segmentIndex: number) {
+  const dayStops = form.cityStops[dayIndex] ?? []
+  if (segmentIndex >= dayStops.length - 1) return false
+
+  const currentCity = dayStops[segmentIndex]?.trim()
+  const nextCity = dayStops[segmentIndex + 1]?.trim()
+  if (!currentCity) return false
+  if (nextCity) return true
+
+  return !dayStops.slice(segmentIndex + 1).some((city) => city.trim().length > 0)
+}
+
 function getTransportIcon(dayIndex: number, segmentIndex: number) {
   const key = getSegmentKey(dayIndex, segmentIndex)
   if (segmentLoading[key]) return 'pi pi-spin pi-spinner'
@@ -3003,10 +3015,12 @@ watch(
                       @click="removeCityStop(item.index, cityIndex)"
                     />
                   </div>
-                  <div v-if="cityIndex < form.cityStops[item.index].length - 1" class="city-connector">
+                  <div
+                    v-if="shouldShowCityConnector(item.index, cityIndex)"
+                    class="city-connector"
+                  >
                     <span v-tooltip.bottom="getDistanceLabel(item.index, cityIndex)" class="distance-label">{{ getDistanceLabel(item.index, cityIndex) }}</span>
-                    <span class="arrow-line" />
-                    <i v-tooltip.bottom="getDistanceLabel(item.index, cityIndex)" :class="['transport-icon', getTransportIcon(item.index, cityIndex)]" />
+                    <span v-tooltip.bottom="getDistanceLabel(item.index, cityIndex)" class="arrow-line" />
                   </div>
                 </template>
 
@@ -3362,8 +3376,28 @@ watch(
   width: 100%;
 }
 
+.hotel-preferences-field {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  align-items: start;
+  column-gap: 0.6rem;
+}
+
+.stay-preferences-field {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  align-items: start;
+  column-gap: 0.6rem;
+}
+
+.stay-preferences-field > label {
+  align-self: start;
+  padding-top: 0.55rem;
+  text-align: left;
+  width: auto;
+}
+
 .hotel-preferences-field > label {
-  align-self: flex-start;
   padding-top: 2rem;
 }
 
@@ -3396,6 +3430,14 @@ watch(
 }
 
 @media (max-width: 768px) {
+  .hotel-preferences-field {
+    grid-template-columns: 1fr;
+  }
+
+  .stay-preferences-field {
+    grid-template-columns: 1fr;
+  }
+
   .hotel-preferences-row {
     flex-wrap: wrap;
     align-items: start;
