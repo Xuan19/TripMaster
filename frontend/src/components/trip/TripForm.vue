@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, inject, onMounted, reactive, ref, watch } from 'vue'
 import AutoComplete from 'primevue/autocomplete'
 import Button from 'primevue/button'
@@ -16,6 +16,7 @@ import {
   fallbackCitiesByCountry,
   fallbackCountryOptions,
   getEstimatedTransportCostDetails,
+  getEstimatedTransportTimingDetails,
   getGeneratedMealCostDetails,
   getGeneratedMealPlan,
   getGeneratedHotelCostDetails,
@@ -27,6 +28,7 @@ import {
   getGeneratedVisitSiteCount,
   getGeneratedVisitTransferInfo,
   getPopularEnRouteStop,
+  inferCountryForCity,
   isTouristHub
 } from './tripEstimation'
 import type { TransportMode } from './tripEstimation'
@@ -50,6 +52,9 @@ interface DayActivity {
   costDetails?: string
   estimatedCost?: boolean
   estimatedTime?: boolean
+  estimatedTimeDetails?: string
+  durationOverrideMinutes?: number
+  startTimeNote?: string
   transportMode?: TransportMode | null
   endDayOffset?: number
   timeNote?: string
@@ -655,6 +660,9 @@ function applyInitialData(initialData: TripFormInitialData | null) {
         costDetails: '',
         estimatedCost: false,
         estimatedTime: false,
+        estimatedTimeDetails: '',
+        durationOverrideMinutes: undefined,
+        startTimeNote: '',
         transportMode: null
       }))
     ) ?? []
@@ -1314,6 +1322,12 @@ function formatTimeZoneLabel(timeZone: string) {
   return parts[parts.length - 1]?.replace(/_/g, ' ') ?? timeZone
 }
 
+function buildLocalTimeNote(label: 'Start time' | 'End time', city: string, timeZone: string, dayOffset = 0) {
+  const country = inferCountryForCity(city, form.countries[0])
+  const suffix = dayOffset > 0 ? ` (+${dayOffset} day${dayOffset > 1 ? 's' : ''})` : ''
+  return `${country} local time${suffix}.`
+}
+
 async function getArrivalTimeInfo(
   fromCity: string,
   toCity: string,
@@ -1330,6 +1344,7 @@ async function getArrivalTimeInfo(
     return {
       endTime: minutesToTime(departureMinutes + durationMinutes),
       endDayOffset: Math.floor((departureMinutes + durationMinutes) / (24 * 60)),
+      startTimeNote: '',
       timeNote: ''
     }
   }
@@ -1347,9 +1362,6 @@ async function getArrivalTimeInfo(
   const arrivalMinutes = arrivalLocalDate.getUTCMinutes()
   const endTime = `${`${arrivalHours}`.padStart(2, '0')}:${`${arrivalMinutes}`.padStart(2, '0')}`
   const departureLocalDayIndex = Math.floor(departureMinutes / (24 * 60))
-  const arrivalLocalDayIndex = Math.floor(
-    (arrivalLocalDate.getUTCDate() - 1)
-  )
   const departureCalendarDate = new Date(`${departureDate}T00:00:00`)
   const arrivalCalendarDate = new Date(Date.UTC(
     arrivalLocalDate.getUTCFullYear(),
@@ -1360,17 +1372,15 @@ async function getArrivalTimeInfo(
     0,
     Math.round((arrivalCalendarDate.getTime() - departureCalendarDate.getTime()) / (24 * 60 * 60 * 1000)) - departureLocalDayIndex
   )
+  const hasTimeZoneChange = fromTimeZone !== toTimeZone
 
   return {
     endTime,
     endDayOffset,
-    timeNote:
-      endDayOffset > 0 || fromTimeZone !== toTimeZone
-        ? `Arrival shown in ${formatTimeZoneLabel(toTimeZone)} local time${endDayOffset > 0 ? ` (+${endDayOffset} day${endDayOffset > 1 ? 's' : ''})` : ''}.`
-        : ''
+    startTimeNote: hasTimeZoneChange ? buildLocalTimeNote('Start time', fromCity, fromTimeZone) : '',
+    timeNote: hasTimeZoneChange ? buildLocalTimeNote('End time', toCity, toTimeZone, endDayOffset) : ''
   }
 }
-
 function formatApiTime(value: string | null | undefined) {
   if (!value) return null
   const parsed = new Date(value)
@@ -1401,6 +1411,9 @@ function addGeneratedActivity(
     costDetails: '',
     estimatedCost: false,
     estimatedTime: false,
+    estimatedTimeDetails: '',
+    durationOverrideMinutes: undefined,
+    startTimeNote: '',
     transportMode: null,
     endDayOffset: 0,
     timeNote: ''
@@ -1460,6 +1473,66 @@ function getTransportDurationMinutes(mode: TransportMode, distance: number | nul
   return roundedDuration(60 + (distance / 80) * 60)
 }
 
+function getLikelyFlightSchedule(
+  fromCity: string,
+  toCity: string,
+  distance: number | null,
+  currentMinutes: number,
+  travelDate?: string
+) {
+  const roundedDuration = (minutes: number) => Math.max(60, Math.ceil(minutes / 5) * 5)
+  const roundedDeparture = (minutes: number) => Math.ceil(minutes / 5) * 5
+  const normalizedDistance = Math.max(0, distance ?? 0)
+  const europeCountries = new Set(['France', 'United Kingdom', 'Italy', 'Spain', 'Germany'])
+  const fromCountry = inferCountryForCity(fromCity, form.countries[0])
+  const toCountry = inferCountryForCity(toCity, form.countries[0])
+  const weekday = travelDate ? new Date(`${travelDate}T12:00:00`).getDay() : 3
+  const weekendBias = weekday === 5 || weekday === 6 || weekday === 0
+  const threshold = Math.max(currentMinutes + 45, 5 * 60)
+
+  let preferredDepartureMinutes = 10 * 60 + 15
+  let durationMinutes = getTransportDurationMinutes('flight', distance)
+
+  const isEuropeChinaRoute =
+    (fromCountry === 'China' && europeCountries.has(toCountry)) ||
+    (toCountry === 'China' && europeCountries.has(fromCountry))
+
+  const isEuropeNorthAmericaRoute =
+    (fromCountry === 'United States' && europeCountries.has(toCountry)) ||
+    (toCountry === 'United States' && europeCountries.has(fromCountry))
+
+  if (isEuropeChinaRoute) {
+    if (fromCountry === 'China') {
+      preferredDepartureMinutes = 16 * 60 + 10
+      durationMinutes = roundedDuration(normalizedDistance >= 7600 ? 11 * 60 + 35 : 12 * 60 + 20)
+    } else {
+      preferredDepartureMinutes = 13 * 60 + 35
+      durationMinutes = roundedDuration(normalizedDistance >= 7600 ? 12 * 60 + 45 : 13 * 60 + 20)
+    }
+  } else if (isEuropeNorthAmericaRoute) {
+    preferredDepartureMinutes = fromCountry === 'United States' ? 14 * 60 + 20 : 13 * 60 + 40
+    durationMinutes = roundedDuration(normalizedDistance >= 5500 ? 8 * 60 + 40 : 7 * 60 + 35)
+  } else if (europeCountries.has(fromCountry) && europeCountries.has(toCountry)) {
+    preferredDepartureMinutes = 11 * 60 + 25
+    durationMinutes = roundedDuration(Math.max(85, 55 + normalizedDistance / 11))
+  } else if (normalizedDistance >= 6500) {
+    preferredDepartureMinutes = 14 * 60 + 10
+    durationMinutes = roundedDuration(Math.max(durationMinutes + 120, 14 * 60 + 30))
+  }
+
+  if (weekendBias) {
+    preferredDepartureMinutes += 10
+  }
+
+  const departureMinutes = preferredDepartureMinutes >= threshold
+    ? preferredDepartureMinutes
+    : roundedDeparture(threshold)
+
+  return {
+    departureMinutes,
+    durationMinutes
+  }
+}
 async function buildAutoActivities(dayStops: string[][]) {
   const dayPlans: GeneratedDayPlan[] = []
   const visitCountsByCity: Record<string, number> = {}
@@ -1645,9 +1718,22 @@ async function buildAutoActivities(dayStops: string[][]) {
         const transportMode = getAllowedTransportModeForDistance(distance)
         let transportStartMinutes = currentMinutes
         let transportEndMinutes = currentMinutes + getTransportDurationMinutes(transportMode, distance)
+
+        if (transportMode === 'flight') {
+          const flightSchedule = getLikelyFlightSchedule(
+            city,
+            nextCity,
+            distance,
+            currentMinutes,
+            itineraryDays.value[dayIndex]?.isoDate
+          )
+          transportStartMinutes = flightSchedule.departureMinutes
+          transportEndMinutes = transportStartMinutes + flightSchedule.durationMinutes
+        }
         let estimatedTime = true
         let hasRealTransportPrice = false
         let endDayOffset = 0
+        let startTimeNote = ''
         let timeNote = ''
         let transportCost = estimateTransportCost(
           transportMode,
@@ -1661,6 +1747,7 @@ async function buildAutoActivities(dayStops: string[][]) {
           transportMode,
           distance,
           city,
+          nextCity,
           form.countries[0],
           formatMoney,
           itineraryDays.value[dayIndex]?.isoDate,
@@ -1670,6 +1757,14 @@ async function buildAutoActivities(dayStops: string[][]) {
           transportMode === 'unknown'
             ? `${city} -> ${nextCity}`
             : `${transportMode} - ${city} -> ${nextCity}`
+        let estimatedTimeDetails = getEstimatedTransportTimingDetails(
+          transportMode,
+          distance,
+          city,
+          nextCity,
+          form.countries[0],
+          itineraryDays.value[dayIndex]?.isoDate
+        )
 
         if (transportMode === 'train' && itineraryDays.value[dayIndex]) {
           const journey = await getTrainJourney(
@@ -1709,6 +1804,7 @@ async function buildAutoActivities(dayStops: string[][]) {
               transportMode,
               distance,
               city,
+              nextCity,
               form.countries[0],
               formatMoney,
               itineraryDays.value[dayIndex]?.isoDate,
@@ -1727,27 +1823,23 @@ async function buildAutoActivities(dayStops: string[][]) {
           }
         }
 
-        const isFinalArrivalLeg =
-          dayIndex === dayStops.length - 1 &&
-          cityIndex === cities.length - 2 &&
-          endCity.length > 0 &&
-          nextCity === endCity
+        const shouldApplyArrivalTimeZone = transportMode === 'flight' && Boolean(itineraryDays.value[dayIndex])
+        const fullTransportDurationMinutes = Math.max(0, transportEndMinutes - transportStartMinutes)
         let displayedEndTime = minutesToTime(Math.min(Math.max(transportStartMinutes, transportEndMinutes), dayEndMinutes))
 
-        if (isFinalArrivalLeg && itineraryDays.value[dayIndex]) {
+        if (shouldApplyArrivalTimeZone && itineraryDays.value[dayIndex]) {
           const arrivalInfo = await getArrivalTimeInfo(
             city,
             nextCity,
             itineraryDays.value[dayIndex].isoDate,
             transportStartMinutes,
-            Math.max(0, transportEndMinutes - transportStartMinutes)
+            fullTransportDurationMinutes
           )
-          transportDetail = arrivalInfo.timeNote ? `${transportDetail} (${arrivalInfo.timeNote})` : transportDetail
           displayedEndTime = arrivalInfo.endTime
           endDayOffset = arrivalInfo.endDayOffset
+          startTimeNote = arrivalInfo.startTimeNote
           timeNote = arrivalInfo.timeNote
         }
-
         transportStartMinutes = Math.min(transportStartMinutes, dayEndMinutes)
         transportEndMinutes = Math.min(Math.max(transportStartMinutes, transportEndMinutes), dayEndMinutes)
 
@@ -1761,6 +1853,9 @@ async function buildAutoActivities(dayStops: string[][]) {
             costDetails: transportCostDetails,
             estimatedCost: transportMode !== 'walk' && !hasRealTransportPrice,
             estimatedTime,
+            estimatedTimeDetails,
+            durationOverrideMinutes: fullTransportDurationMinutes,
+            startTimeNote,
             transportMode,
             endDayOffset,
             timeNote
@@ -1995,6 +2090,9 @@ function addActivity(dayIndex: number) {
     costDetails: '',
     estimatedCost: false,
     estimatedTime: false,
+    estimatedTimeDetails: '',
+    durationOverrideMinutes: undefined,
+    startTimeNote: '',
     transportMode: null,
     endDayOffset: 0,
     timeNote: ''
@@ -2187,6 +2285,14 @@ function isValidTimeRange(dayIndex: number, activityIndex: number, activity: Day
 }
 
 function getActivityDurationLabel(activity: DayActivity) {
+  if (typeof activity.durationOverrideMinutes === 'number' && Number.isFinite(activity.durationOverrideMinutes)) {
+    const diff = Math.max(0, Math.round(activity.durationOverrideMinutes))
+    const hours = Math.floor(diff / 60)
+    const minutes = diff % 60
+    const baseLabel = hours && minutes ? `${hours}h ${minutes}m` : hours ? `${hours}h` : `${minutes}m`
+    return (activity.endDayOffset ?? 0) > 0 ? `${baseLabel} (+${activity.endDayOffset} day)` : baseLabel
+  }
+
   if (!activity.startTime || !activity.endTime) return '--'
 
   const [startHour, startMinute] = activity.startTime.split(':').map(Number)
@@ -2205,7 +2311,6 @@ function getActivityDurationLabel(activity: DayActivity) {
   const baseLabel = hours && minutes ? `${hours}h ${minutes}m` : hours ? `${hours}h` : `${minutes}m`
   return (activity.endDayOffset ?? 0) > 0 ? `${baseLabel} (+${activity.endDayOffset} day)` : baseLabel
 }
-
 function handleCityDragStart(event: DragEvent, dayIndex: number, cityIndex: number) {
   if (event.dataTransfer) {
     event.dataTransfer.effectAllowed = 'move'
@@ -2780,8 +2885,8 @@ watch(
                 <div class="activity-time-field">
                   <small class="activity-time-label">
                     <i
-                      v-if="activity.type === 'transport' && activity.transportMode === 'train' && activity.estimatedTime"
-                      v-tooltip.bottom="props.texts.estimatedTimeWarning"
+                      v-if="activity.startTimeNote"
+                      v-tooltip.bottom="activity.startTimeNote"
                       class="pi pi-exclamation-triangle activity-warning-icon"
                     />
                     <span>{{ props.texts.activityStartTime }}</span>
@@ -3014,3 +3119,28 @@ watch(
 }
 
 </style>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -903,6 +903,101 @@ function getSeasonMultiplier(isoDate?: string) {
   return 0.94
 }
 
+function getSeasonLabel(isoDate?: string) {
+  const multiplier = getSeasonMultiplier(isoDate)
+
+  if (multiplier >= 1.18) return 'peak season'
+  if (multiplier > 1) return 'shoulder season'
+  return 'low season'
+}
+
+function getWeekdayLabel(isoDate?: string) {
+  if (!isoDate) return 'unspecified weekday'
+
+  const date = new Date(`${isoDate}T12:00:00`)
+  return new Intl.DateTimeFormat('en-US', { weekday: 'long' }).format(date)
+}
+
+function isPrimaryFlightHub(city: string) {
+  const normalizedCity = city.trim().toLowerCase()
+  return ['beijing', 'shanghai', 'paris', 'tokyo', 'london', 'frankfurt', 'new york', 'los angeles'].includes(normalizedCity)
+}
+
+function getFlightRouteFamily(fromCity: string, toCity: string, fallbackCountry?: string) {
+  const fromCountry = inferCountryForCity(fromCity, fallbackCountry)
+  const toCountry = inferCountryForCity(toCity, fallbackCountry)
+  const europeCountries = new Set(['France', 'United Kingdom', 'Italy', 'Spain', 'Germany'])
+
+  if (fromCountry === toCountry) return `domestic ${fromCountry.toLowerCase()}`
+  if (europeCountries.has(fromCountry) && europeCountries.has(toCountry)) return 'intra-Europe'
+  if (
+    (fromCountry === 'China' && europeCountries.has(toCountry)) ||
+    (toCountry === 'China' && europeCountries.has(fromCountry))
+  ) {
+    return 'Europe-China long-haul'
+  }
+
+  if (
+    (fromCountry === 'Japan' && europeCountries.has(toCountry)) ||
+    (toCountry === 'Japan' && europeCountries.has(fromCountry))
+  ) {
+    return 'Europe-Japan long-haul'
+  }
+
+  if (
+    (fromCountry === 'United States' && europeCountries.has(toCountry)) ||
+    (toCountry === 'United States' && europeCountries.has(fromCountry))
+  ) {
+    return 'Europe-North America long-haul'
+  }
+
+  return `${fromCountry}-${toCountry} corridor`
+}
+
+function getFlightConnectionPattern(fromCity: string, toCity: string, distance: number | null) {
+  const normalizedDistance = Math.max(0, distance ?? 0)
+  const hubPair = isPrimaryFlightHub(fromCity) && isPrimaryFlightHub(toCity)
+
+  if (normalizedDistance >= 6500 && hubPair) return 'likely nonstop hub-to-hub flight'
+  if (normalizedDistance >= 6500) return 'likely 1-stop long-haul connection'
+  if (normalizedDistance >= 1800 && hubPair) return 'likely nonstop medium-haul flight'
+  if (normalizedDistance >= 1800) return 'mixed nonstop / 1-stop medium-haul pattern'
+  return 'short-haul schedule pattern'
+}
+
+export function getEstimatedTransportTimingDetails(
+  mode: TransportMode,
+  distance: number | null,
+  fromCity: string,
+  toCity: string,
+  fallbackCountry?: string,
+  travelDate?: string
+) {
+  const normalizedDistance = Math.max(0, distance ?? 80)
+  const weekday = getWeekdayLabel(travelDate)
+  const seasonLabel = getSeasonLabel(travelDate)
+
+  if (mode === 'flight') {
+    const routeFamily = getFlightRouteFamily(fromCity, toCity, fallbackCountry)
+    const connectionPattern = getFlightConnectionPattern(fromCity, toCity, distance)
+    return `Estimated time. ${fromCity} -> ${toCity}, ${Math.round(normalizedDistance)} km, ${routeFamily}, ${seasonLabel}, ${weekday} departure, ${connectionPattern}. Arrival is adjusted to destination local time when the route crosses time zones.`
+  }
+
+  if (mode === 'train') {
+    return `Estimated time. ${fromCity} -> ${toCity}, ${Math.round(normalizedDistance)} km, ${seasonLabel}, ${weekday} departure. Train duration stays estimated until a real timetable is available.`
+  }
+
+  if (mode === 'drive') {
+    return `Estimated time. ${fromCity} -> ${toCity}, ${Math.round(normalizedDistance)} km road segment, ${seasonLabel}, ${weekday} departure.`
+  }
+
+  if (mode === 'local') {
+    return `Estimated time. ${fromCity} -> ${toCity}, ${Math.round(normalizedDistance)} km local transit segment, ${weekday}.`
+  }
+
+  return `Estimated time. ${fromCity} -> ${toCity}, ${Math.round(normalizedDistance)} km, ${weekday}.`
+}
+
 function inferVisitDurationMinutes(highlight: string) {
   const normalized = highlight.toLowerCase()
 
@@ -1262,6 +1357,7 @@ export function estimateTransportCost(
   mode: TransportMode,
   distance: number | null,
   fromCity: string,
+  toCity: string,
   fallbackCountry: string | undefined,
   travelDate?: string,
   trainLabel?: string | null
@@ -1318,6 +1414,7 @@ export function getEstimatedTransportCostDetails(
   mode: TransportMode,
   distance: number | null,
   fromCity: string,
+  toCity: string,
   fallbackCountry: string | undefined,
   formatMoney: MoneyFormatter,
   travelDate?: string,
@@ -1342,6 +1439,12 @@ export function getEstimatedTransportCostDetails(
   if (mode === 'drive') {
     return `Estimated price. Driving cost: fuel ${formatMoney(fuelPrice)}/L, ${litersPer100Km.toFixed(1)}L/100km, toll ${formatMoney(tollRate)}/km, distance ${Math.round(normalizedDistance)} km`
   }
-  if (mode === 'flight') return `Estimated price. Flight fare based on ${Math.round(normalizedDistance)} km in ${seasonLabel}`
+  if (mode === 'flight') {
+    const weekday = getWeekdayLabel(travelDate)
+    const routeFamily = getFlightRouteFamily(fromCity, toCity, fallbackCountry)
+    return `Estimated price. Flight fare based on ${Math.round(normalizedDistance)} km, ${routeFamily}, ${seasonLabel}, ${weekday}, and a likely direct vs 1-stop route pattern.`
+  }
   return `Estimated price. Travel cost based on ${Math.round(normalizedDistance)} km`
 }
+
+
