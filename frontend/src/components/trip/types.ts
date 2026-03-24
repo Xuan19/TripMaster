@@ -1,3 +1,5 @@
+import type { Currency } from '../../locales/i18n'
+
 export type ActivityType = 'visit' | 'meal' | 'transport' | 'shopping' | 'other'
 
 export interface TripDayActivityDetails {
@@ -27,7 +29,11 @@ export interface TripDayDetails {
 
 export interface TripPlanDetails {
   countries: string[]
+  currencyCode?: Currency
   hotelStars?: number
+  adults?: number
+  children?: number
+  rooms?: number
   dayPlans: TripDayDetails[]
 }
 

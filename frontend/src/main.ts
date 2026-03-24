@@ -4,16 +4,23 @@ import ConfirmationService from 'primevue/confirmationservice'
 import Tooltip from 'primevue/tooltip'
 import App from './app/App.vue'
 import { router } from './app/router'
+import { loadExchangeRates } from './utils/currency'
 import './styles/style.css'
 import 'primevue/resources/themes/lara-light-blue/theme.css'
 import 'primevue/resources/primevue.min.css'
 import 'primeicons/primeicons.css'
 
-const app = createApp(App)
+async function bootstrap() {
+  await loadExchangeRates()
 
-app.use(PrimeVue)
-app.use(ConfirmationService)
-app.directive('tooltip', Tooltip)
-app.use(router)
+  const app = createApp(App)
 
-app.mount('#app')
+  app.use(PrimeVue)
+  app.use(ConfirmationService)
+  app.directive('tooltip', Tooltip)
+  app.use(router)
+
+  app.mount('#app')
+}
+
+void bootstrap()

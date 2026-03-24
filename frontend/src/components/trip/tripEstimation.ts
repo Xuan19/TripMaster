@@ -1,6 +1,15 @@
+import type { Currency } from '../../locales/i18n'
+import { convertAmount } from '../../utils/currency'
+
 export type TransportMode = 'walk' | 'local' | 'train' | 'drive' | 'flight' | 'unknown'
 
 type MoneyFormatter = (value: number) => string
+
+interface OccupancyInputs {
+  adults?: number | null
+  children?: number | null
+  rooms?: number | null
+}
 
 interface MealOption {
   dish: string
@@ -61,6 +70,28 @@ export const fallbackCountryOptions = [
   'Canada',
   'Australia'
 ]
+
+function normalizeOccupancy(occupancy?: OccupancyInputs) {
+  const adults = Math.max(1, Math.floor(occupancy?.adults ?? 1))
+  const children = Math.max(0, Math.floor(occupancy?.children ?? 0))
+  const rooms = Math.max(1, Math.floor(occupancy?.rooms ?? 1))
+  return { adults, children, rooms }
+}
+
+function getMealPartyUnits(occupancy?: OccupancyInputs) {
+  const { adults, children } = normalizeOccupancy(occupancy)
+  return adults + children * 0.65
+}
+
+function getVisitPartyUnits(occupancy?: OccupancyInputs) {
+  const { adults, children } = normalizeOccupancy(occupancy)
+  return adults + children * 0.5
+}
+
+function getPassengerUnits(occupancy?: OccupancyInputs) {
+  const { adults, children } = normalizeOccupancy(occupancy)
+  return adults + children * 0.75
+}
 
 export const fallbackCitiesByCountry: Record<string, string[]> = {
   China: ['Beijing', 'Shanghai', 'Shenzhen', 'Guangzhou'],
@@ -1116,12 +1147,19 @@ export function getGeneratedVisitDurationMinutes(city: string, visitIndex: numbe
   return Math.max(60, Math.min(240, totalDuration + transferBuffer))
 }
 
-export function getGeneratedVisitCost(city: string, visitIndex: number, travelDate?: string) {
+export function getGeneratedVisitCost(
+  city: string,
+  visitIndex: number,
+  travelDate?: string,
+  occupancy?: OccupancyInputs,
+  currency: Currency = 'EUR'
+) {
   const selected = getSelectedVisitHighlights(city, visitIndex)
   const seasonMultiplier = getSeasonMultiplier(travelDate)
+  const partyUnits = getVisitPartyUnits(occupancy)
 
   if (selected.length === 0) {
-    return Math.round(18 * seasonMultiplier * 100) / 100
+    return convertAmount(Math.round(18 * seasonMultiplier * partyUnits * 100) / 100, 'EUR', currency)
   }
 
   const knownPrices = selected
@@ -1129,39 +1167,43 @@ export function getGeneratedVisitCost(city: string, visitIndex: number, travelDa
     .filter((price): price is number => typeof price === 'number')
 
   if (knownPrices.length === 0) {
-    return Math.round(18 * seasonMultiplier * 100) / 100
+    return convertAmount(Math.round(18 * seasonMultiplier * partyUnits * 100) / 100, 'EUR', currency)
   }
 
   const totalPrice = knownPrices.reduce((sum, price) => sum + price, 0)
-  return Math.round(totalPrice * seasonMultiplier * 100) / 100
+  return convertAmount(Math.round(totalPrice * seasonMultiplier * partyUnits * 100) / 100, 'EUR', currency)
 }
 
 export function getGeneratedVisitCostDetails(
   city: string,
   visitIndex: number,
   travelDate: string | undefined,
-  formatMoney: MoneyFormatter
+  formatMoney: MoneyFormatter,
+  occupancy?: OccupancyInputs,
+  currency: Currency = 'EUR'
 ) {
   const selected = getSelectedVisitHighlights(city, visitIndex)
   const seasonMultiplier = getSeasonMultiplier(travelDate)
+  const { adults, children } = normalizeOccupancy(occupancy)
+  const partyLabel = `${adults} adult${adults === 1 ? '' : 's'}${children > 0 ? `, ${children} child${children === 1 ? '' : 'ren'}` : ''}`
 
   if (selected.length === 0) {
-    return `Estimated price. Average ticket cost in ${city}`
+    return `Estimated price. Average ticket cost in ${city} for ${partyLabel}`
   }
 
   const priced = selected
     .map((highlight) => {
       const price = attractionPriceByName[highlight]
-      return typeof price === 'number' ? `${highlight}: ${formatMoney(price)}` : null
+      return typeof price === 'number' ? `${highlight}: ${formatMoney(convertAmount(price, 'EUR', currency))}` : null
     })
     .filter((value): value is string => Boolean(value))
 
   if (priced.length === 0) {
-    return `Estimated price. Average ticket cost in ${city}`
+    return `Estimated price. Average ticket cost in ${city} for ${partyLabel}`
   }
 
   const seasonLabel = seasonMultiplier > 1.1 ? 'high season adjusted' : seasonMultiplier < 1 ? 'low season adjusted' : 'standard season'
-  return `Estimated price. ${priced.join(' | ')} (${seasonLabel})`
+  return `Estimated price. ${priced.join(' | ')} (${seasonLabel}, ${partyLabel})`
 }
 
 function getMealOptionsForCity(city: string, fallbackCountry?: string) {
@@ -1178,10 +1220,11 @@ function getMealOptionsForCity(city: string, fallbackCountry?: string) {
   })
 }
 
-function getMealEstimate(city: string, mealIndex: number, fallbackCountry?: string): MealEstimate {
+function getMealEstimate(city: string, mealIndex: number, fallbackCountry?: string, occupancy?: OccupancyInputs): MealEstimate {
   const mealOptions = getMealOptionsForCity(city, fallbackCountry)
   const country = inferCountryForCity(city, fallbackCountry)
   const normalizedCity = city.trim().toLowerCase()
+  const partyUnits = getMealPartyUnits(occupancy)
 
   if (!mealOptions.length) {
     const countryMultiplier = countryMealCostMultiplier[country] ?? 1
@@ -1189,7 +1232,7 @@ function getMealEstimate(city: string, mealIndex: number, fallbackCountry?: stri
 
     return {
       name: city,
-      cost: Math.round(20 * cityMultiplier * 100) / 100,
+      cost: Math.round(20 * cityMultiplier * partyUnits * 100) / 100,
       pricingBasis:
         cityMealCostMultiplier[normalizedCity] !== undefined
           ? `${city} sample-city meal profile`
@@ -1200,7 +1243,7 @@ function getMealEstimate(city: string, mealIndex: number, fallbackCountry?: stri
   const mealPlan = mealOptions[mealIndex % mealOptions.length]
   const countryMultiplier = countryMealCostMultiplier[country] ?? 1
   const cityMultiplier = cityMealCostMultiplier[normalizedCity] ?? countryMultiplier
-  const adjustedCost = Math.max(4, Math.round(mealPlan.averageCost * cityMultiplier * 100) / 100)
+  const adjustedCost = Math.max(4, Math.round(mealPlan.averageCost * cityMultiplier * partyUnits * 100) / 100)
 
   return {
     name: mealPlan.dish,
@@ -1212,17 +1255,24 @@ function getMealEstimate(city: string, mealIndex: number, fallbackCountry?: stri
   }
 }
 
-export function getGeneratedMealPlan(city: string, mealIndex: number, fallbackCountry?: string) {
-  const estimate = getMealEstimate(city, mealIndex, fallbackCountry)
+export function getGeneratedMealPlan(
+  city: string,
+  mealIndex: number,
+  fallbackCountry?: string,
+  occupancy?: OccupancyInputs,
+  currency: Currency = 'EUR'
+) {
+  const estimate = getMealEstimate(city, mealIndex, fallbackCountry, occupancy)
   return {
     name: estimate.name,
-    cost: estimate.cost
+    cost: convertAmount(estimate.cost, 'EUR', currency)
   }
 }
 
-export function getGeneratedMealCostDetails(city: string, mealIndex: number, fallbackCountry?: string) {
-  const estimate = getMealEstimate(city, mealIndex, fallbackCountry)
-  return `Estimated price. Average price for 1 person: ${estimate.name} (${estimate.pricingBasis})`
+export function getGeneratedMealCostDetails(city: string, mealIndex: number, fallbackCountry?: string, occupancy?: OccupancyInputs) {
+  const estimate = getMealEstimate(city, mealIndex, fallbackCountry, occupancy)
+  const { adults, children } = normalizeOccupancy(occupancy)
+  return `Estimated price. Average meal price for ${adults} adult${adults === 1 ? '' : 's'}${children > 0 ? ` and ${children} child${children === 1 ? '' : 'ren'}` : ''}: ${estimate.name} (${estimate.pricingBasis})`
 }
 
 export function getPopularEnRouteStop(fromCity: string, toCity: string) {
@@ -1234,12 +1284,14 @@ function getHotelEstimate(
   city: string,
   stars: number,
   fallbackCountry?: string,
-  stayDate?: string
+  stayDate?: string,
+  occupancy?: OccupancyInputs
 ): HotelEstimate {
   const country = inferCountryForCity(city, fallbackCountry)
   const normalizedCity = city.trim().toLowerCase()
   const seasonMultiplier = getSeasonMultiplier(stayDate)
   const sampledCityRates = cityHotelNightlyRateByStar[normalizedCity]
+  const { rooms, adults, children } = normalizeOccupancy(occupancy)
 
   let nightlyCost: number
   let pricingBasis: string
@@ -1263,8 +1315,8 @@ function getHotelEstimate(
 
   return {
     name,
-    cost: nightlyCost,
-    pricingBasis: `${pricingBasis}, ${seasonLabel}`
+    cost: nightlyCost * rooms,
+    pricingBasis: `${pricingBasis}, ${seasonLabel}, ${rooms} room${rooms === 1 ? '' : 's'} for ${adults} adult${adults === 1 ? '' : 's'}${children > 0 ? ` and ${children} child${children === 1 ? '' : 'ren'}` : ''}`
   }
 }
 
@@ -1272,13 +1324,15 @@ export function getGeneratedHotelPlan(
   city: string,
   stars: number,
   fallbackCountry?: string,
-  stayDate?: string
+  stayDate?: string,
+  occupancy?: OccupancyInputs,
+  currency: Currency = 'EUR'
 ) {
-  const estimate = getHotelEstimate(city, stars, fallbackCountry, stayDate)
+  const estimate = getHotelEstimate(city, stars, fallbackCountry, stayDate, occupancy)
   return {
     type: 'hotel',
     name: estimate.name,
-    cost: estimate.cost
+    cost: convertAmount(estimate.cost, 'EUR', currency)
   }
 }
 
@@ -1286,9 +1340,10 @@ export function getGeneratedHotelCostDetails(
   city: string,
   stars: number,
   fallbackCountry?: string,
-  stayDate?: string
+  stayDate?: string,
+  occupancy?: OccupancyInputs
 ) {
-  const estimate = getHotelEstimate(city, stars, fallbackCountry, stayDate)
+  const estimate = getHotelEstimate(city, stars, fallbackCountry, stayDate, occupancy)
   return `Proposed nightly rate for a ${stars}-star hotel in ${city}. ${estimate.pricingBasis}.`
 }
 
@@ -1360,7 +1415,9 @@ export function estimateTransportCost(
   toCity: string,
   fallbackCountry: string | undefined,
   travelDate?: string,
-  trainLabel?: string | null
+  trainLabel?: string | null,
+  occupancy?: OccupancyInputs,
+  currency: Currency = 'EUR'
 ) {
   if (mode === 'walk') return 0
 
@@ -1372,9 +1429,14 @@ export function estimateTransportCost(
   const litersPer100Km = countryVehicleLitersPer100Km[country] ?? 7.2
   const localTransitBaseFare = countryLocalTransitBaseFare[country] ?? 2.5
   const roundPrice = (value: number) => Math.max(0, Math.round(value * 100) / 100)
+  const passengerUnits = getPassengerUnits(occupancy)
 
   if (mode === 'local') {
-    return roundPrice(Math.max(localTransitBaseFare, localTransitBaseFare + normalizedDistance * 0.045))
+    return convertAmount(
+      roundPrice(Math.max(localTransitBaseFare, localTransitBaseFare + normalizedDistance * 0.045) * passengerUnits),
+      'EUR',
+      currency
+    )
   }
 
   if (mode === 'train') {
@@ -1394,20 +1456,20 @@ export function estimateTransportCost(
           : normalizedDistance <= 220
             ? profile.longFloor
             : profile.extraLongFloor
-    return roundPrice(Math.max(rawFare, routeFloor * seasonMultiplier))
+    return convertAmount(roundPrice(Math.max(rawFare, routeFloor * seasonMultiplier) * passengerUnits), 'EUR', currency)
   }
 
   if (mode === 'drive') {
     const fuelCost = (normalizedDistance / 100) * litersPer100Km * fuelPrice
     const tollCost = normalizedDistance > 80 ? normalizedDistance * tollRate : 0
-    return roundPrice((fuelCost + tollCost + 4.5) * seasonMultiplier)
+    return convertAmount(roundPrice((fuelCost + tollCost + 4.5) * seasonMultiplier), 'EUR', currency)
   }
 
   if (mode === 'flight') {
-    return roundPrice((40 + normalizedDistance * 0.09) * (seasonMultiplier + 0.12))
+    return convertAmount(roundPrice((40 + normalizedDistance * 0.09) * (seasonMultiplier + 0.12) * passengerUnits), 'EUR', currency)
   }
 
-  return roundPrice((6 + normalizedDistance * 0.08) * seasonMultiplier)
+  return convertAmount(roundPrice((6 + normalizedDistance * 0.08) * seasonMultiplier), 'EUR', currency)
 }
 
 export function getEstimatedTransportCostDetails(
@@ -1418,7 +1480,9 @@ export function getEstimatedTransportCostDetails(
   fallbackCountry: string | undefined,
   formatMoney: MoneyFormatter,
   travelDate?: string,
-  trainLabel?: string | null
+  trainLabel?: string | null,
+  occupancy?: OccupancyInputs,
+  currency: Currency = 'EUR'
 ) {
   const normalizedDistance = Math.max(0, distance ?? 80)
   const country = inferCountryForCity(fromCity, fallbackCountry)
@@ -1427,22 +1491,24 @@ export function getEstimatedTransportCostDetails(
   const tollRate = countryTollRatePerKm[country] ?? 0.03
   const litersPer100Km = countryVehicleLitersPer100Km[country] ?? 7.2
   const seasonLabel = seasonMultiplier > 1.1 ? 'high season' : seasonMultiplier < 1 ? 'low season' : 'standard season'
+  const { adults, children } = normalizeOccupancy(occupancy)
+  const partyLabel = `${adults} adult${adults === 1 ? '' : 's'}${children > 0 ? `, ${children} child${children === 1 ? '' : 'ren'}` : ''}`
 
   if (mode === 'walk') return 'No transport cost'
   if (mode === 'local') {
-    return `Estimated price. Local fare based on ${Math.round(normalizedDistance)} km and ${country} base transit fare assumptions`
+    return `Estimated price. Local fare for ${partyLabel} based on ${Math.round(normalizedDistance)} km and ${country} base transit fare assumptions`
   }
   if (mode === 'train') {
     const profile = resolveTrainFareProfile(country, trainLabel)
-    return `Estimated price. ${profile.label} fare based on ${Math.round(normalizedDistance)} km, ${seasonLabel}, operator/region profile, and route-length fare floors`
+    return `Estimated price. ${profile.label} fare for ${partyLabel} based on ${Math.round(normalizedDistance)} km, ${seasonLabel}, operator/region profile, and route-length fare floors`
   }
   if (mode === 'drive') {
-    return `Estimated price. Driving cost: fuel ${formatMoney(fuelPrice)}/L, ${litersPer100Km.toFixed(1)}L/100km, toll ${formatMoney(tollRate)}/km, distance ${Math.round(normalizedDistance)} km`
+    return `Estimated price. Driving cost: fuel ${formatMoney(convertAmount(fuelPrice, 'EUR', currency))}/L, ${litersPer100Km.toFixed(1)}L/100km, toll ${formatMoney(convertAmount(tollRate, 'EUR', currency))}/km, distance ${Math.round(normalizedDistance)} km`
   }
   if (mode === 'flight') {
     const weekday = getWeekdayLabel(travelDate)
     const routeFamily = getFlightRouteFamily(fromCity, toCity, fallbackCountry)
-    return `Estimated price. Flight fare based on ${Math.round(normalizedDistance)} km, ${routeFamily}, ${seasonLabel}, ${weekday}, and a likely direct vs 1-stop route pattern.`
+    return `Estimated price. Flight fare for ${partyLabel} based on ${Math.round(normalizedDistance)} km, ${routeFamily}, ${seasonLabel}, ${weekday}, and a likely direct vs 1-stop route pattern.`
   }
   return `Estimated price. Travel cost based on ${Math.round(normalizedDistance)} km`
 }

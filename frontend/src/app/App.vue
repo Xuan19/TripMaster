@@ -20,6 +20,7 @@ import {
 } from '../locales/i18n'
 import { deleteTrip, getTrips, type Trip } from '../services/api/tripsApi'
 import { clearAuthSession, getAuthUsername, isAuthenticated } from '../services/api/authSession'
+import { convertAmount, isCurrency } from '../utils/currency'
 
 const language = ref<Language>('en')
 const currency = ref<Currency>('EUR')
@@ -49,8 +50,65 @@ function sanitizeFileName(value: string) {
   return normalized.length > 0 ? normalized : 'trip'
 }
 
+function getTripSourceCurrency(trip: Trip): Currency {
+  return isCurrency(trip.details?.currencyCode) ? trip.details.currencyCode : currency.value
+}
+
+function convertTripAmount(value: number, trip: Trip) {
+  return convertAmount(value, getTripSourceCurrency(trip), currency.value)
+}
+
+function buildTripCostSummary(trip: Trip) {
+  const dayPlans = trip.details?.dayPlans ?? []
+  const summary = {
+    accommodation: 0,
+    visit: 0,
+    meal: 0,
+    transport: 0,
+    shopping: 0,
+    other: 0
+  }
+
+  dayPlans.forEach((dayPlan) => {
+    summary.accommodation += convertTripAmount(Number(dayPlan.accommodation?.cost ?? 0), trip)
+    dayPlan.activities.forEach((activity) => {
+      const cost = convertTripAmount(Number(activity.cost ?? 0), trip)
+      switch (activity.type) {
+        case 'visit':
+          summary.visit += cost
+          break
+        case 'meal':
+          summary.meal += cost
+          break
+        case 'transport':
+          summary.transport += cost
+          break
+        case 'shopping':
+          summary.shopping += cost
+          break
+        default:
+          summary.other += cost
+          break
+      }
+    })
+  })
+
+  const rows = [
+    { label: texts.value.accommodation, value: summary.accommodation },
+    { label: texts.value.activityVisit, value: summary.visit },
+    { label: texts.value.activityMeal, value: summary.meal },
+    { label: texts.value.activityTransport, value: summary.transport },
+    { label: texts.value.activityShopping, value: summary.shopping },
+    { label: texts.value.activityOther, value: summary.other }
+  ].filter((row) => row.value > 0)
+
+  const total = rows.reduce((sum, row) => sum + row.value, 0)
+  return { rows, total }
+}
+
 function buildTripWordHtml(trip: Trip) {
   const dayPlans = trip.details?.dayPlans ?? []
+  const costSummary = buildTripCostSummary(trip)
   const daySections = dayPlans.length
     ? dayPlans
         .map((dayPlan) => {
@@ -82,7 +140,7 @@ function buildTripWordHtml(trip: Trip) {
                           <td>${escapeHtml(activity.endTime)}</td>
                           <td>${escapeHtml(activity.type)}</td>
                           <td>${escapeHtml(activity.details)}</td>
-                          <td>${formatBudget(Number(activity.cost ?? 0))}</td>
+                          <td>${formatBudget(convertTripAmount(Number(activity.cost ?? 0), trip))}</td>
                         </tr>
                       `
                     )
@@ -120,6 +178,7 @@ function buildTripWordHtml(trip: Trip) {
           th, td { border: 1px solid #e9b7cb; padding: 6px 8px; text-align: left; vertical-align: top; }
           th { background: #fff1f7; color: #7a103f; }
           .summary { margin-bottom: 18px; }
+          .cost-summary { margin: 16px 0 20px; }
           .day-section { margin-top: 20px; }
         </style>
       </head>
@@ -128,9 +187,42 @@ function buildTripWordHtml(trip: Trip) {
         <div class="summary">
           <p><strong>${escapeHtml(texts.value.country)}:</strong> ${escapeHtml(trip.country)}</p>
           <p><strong>${escapeHtml(texts.value.startDate)}:</strong> ${escapeHtml(trip.startDate)} -> ${escapeHtml(trip.endDate)}</p>
-          <p><strong>${escapeHtml(texts.value.budgetLabel)}:</strong> ${formatBudget(Number(trip.budget))}</p>
+          <p><strong>${escapeHtml(texts.value.budgetLabel)}:</strong> ${formatBudget(convertTripAmount(Number(trip.budget), trip))}</p>
         </div>
         ${daySections}
+        ${
+          costSummary.rows.length
+            ? `
+              <section class="cost-summary">
+                <h2>Cost summary</h2>
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Type</th>
+                      <th>${escapeHtml(texts.value.activityCost)}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${costSummary.rows
+                      .map(
+                        (row) => `
+                          <tr>
+                            <td>${escapeHtml(row.label)}</td>
+                            <td>${formatBudget(row.value)}</td>
+                          </tr>
+                        `
+                      )
+                      .join('')}
+                    <tr>
+                      <td><strong>${escapeHtml(texts.value.totalCost)}</strong></td>
+                      <td><strong>${formatBudget(costSummary.total)}</strong></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </section>
+            `
+            : ''
+        }
       </body>
     </html>
   `
@@ -172,7 +264,7 @@ function formatTripPreview(trip: Trip) {
     `${trip.name}`,
     `${texts.value.country}: ${trip.country}`,
     `${texts.value.startDate}: ${trip.startDate} -> ${trip.endDate}`,
-    `${texts.value.budgetLabel}: ${formatBudget(Number(trip.budget))}`
+    `${texts.value.budgetLabel}: ${formatBudget(convertTripAmount(Number(trip.budget), trip))}`
   ]
 
   const dayPlans = trip.details?.dayPlans ?? []
@@ -354,7 +446,7 @@ provide(appUiContextKey, {
             <div class="trip-summary">
               <p><strong>{{ texts.country }}:</strong> {{ trip.country }}</p>
               <p><strong>{{ texts.startDate }}:</strong> {{ trip.startDate }} -> {{ trip.endDate }}</p>
-              <p><strong>{{ texts.budgetLabel }}:</strong> {{ formatBudget(Number(trip.budget)) }}</p>
+              <p><strong>{{ texts.budgetLabel }}:</strong> {{ formatBudget(convertTripAmount(Number(trip.budget), trip)) }}</p>
               <div class="trip-summary-actions">
                 <Button
                   type="button"

@@ -42,6 +42,7 @@ import {
   searchCitiesWorldwide
 } from '../../services/api/geodataApi'
 import { getTrainJourney } from '../../services/api/transportApi'
+import { convertAmount, isCurrency } from '../../utils/currency'
 
 interface DayActivity {
   startTime: string
@@ -120,6 +121,8 @@ const cityLoading = ref(false)
 const startCitySearching = ref(false)
 const startCitySuggestions = ref<CitySearchSuggestion[]>([])
 const startCityInputValue = ref<string | CitySearchSuggestion>('')
+const endCitySearching = ref(false)
+const endCitySuggestions = ref<CitySearchSuggestion[]>([])
 const segmentDistances = reactive<Record<string, number | null>>({})
 const segmentLoading = reactive<Record<string, boolean>>({})
 const segmentSignatures = reactive<Record<string, string>>({})
@@ -133,6 +136,7 @@ const activityLoadingByDay = ref<Record<number, boolean>>({})
 const skipCountryReset = ref(false)
 let distanceDebounceTimer: ReturnType<typeof setTimeout> | null = null
 let cityLoaderTimer: ReturnType<typeof setTimeout> | null = null
+const formCurrencyCode = ref<Currency>(props.currencyCode)
 
 const form = reactive({
   name: '',
@@ -143,6 +147,9 @@ const form = reactive({
   routeEndCity: '',
   allowedTransportModes: [...defaultAllowedTransportModes] as TransportMode[],
   hotelStars: 3 as number | null,
+  adults: 2 as number | null,
+  children: 0 as number | null,
+  rooms: 1 as number | null,
   stayPreferences: [{ city: '', days: null }] as StayPreference[],
   cityStops: [] as string[][],
   dayAccommodations: [] as DayAccommodation[],
@@ -372,6 +379,36 @@ function setHotelStars(stars: number) {
   form.hotelStars = stars
 }
 
+function getOccupancyInputs() {
+  return {
+    adults: form.adults,
+    children: form.children,
+    rooms: form.rooms
+  }
+}
+
+function convertNullableAmount(value: number | null | undefined, from: Currency, to: Currency) {
+  if (value === null || value === undefined || !Number.isFinite(value)) return value ?? null
+  return convertAmount(Number(value), from, to)
+}
+
+function convertFormCurrency(from: Currency, to: Currency) {
+  if (from === to) return
+
+  form.budget = convertNullableAmount(form.budget, from, to)
+  form.dayActivities = form.dayActivities.map((activities) =>
+    activities.map((activity) => ({
+      ...activity,
+      cost: convertNullableAmount(activity.cost, from, to)
+    }))
+  )
+  form.dayAccommodations = form.dayAccommodations.map((accommodation) => ({
+    ...accommodation,
+    cost: convertNullableAmount(accommodation.cost, from, to)
+  }))
+  formCurrencyCode.value = to
+}
+
 function hasActiveStayPreferences() {
   return form.stayPreferences.some((preference) => preference.city.trim().length > 0)
 }
@@ -383,6 +420,10 @@ function resetTripDataForCountryChange() {
   form.routeStartCity = ''
   form.routeEndCity = ''
   form.allowedTransportModes = [...defaultAllowedTransportModes]
+  form.hotelStars = 3
+  form.adults = 2
+  form.children = 0
+  form.rooms = 1
   form.stayPreferences = [{ city: '', days: null }]
   form.cityStops = []
   form.dayAccommodations = []
@@ -628,7 +669,11 @@ function createEmptyAccommodation(): DayAccommodation {
 
 function applyInitialData(initialData: TripFormInitialData | null) {
   if (!initialData) {
+    formCurrencyCode.value = props.currencyCode
     form.hotelStars = 3
+    form.adults = 2
+    form.children = 0
+    form.rooms = 1
     form.stayPreferences = [{ city: '', days: null }]
     form.dayAccommodations = []
     return
@@ -685,6 +730,12 @@ function applyInitialData(initialData: TripFormInitialData | null) {
   const lastDayCities = cityStopsFromDetails[cityStopsFromDetails.length - 1] ?? []
   form.routeEndCity = lastDayCities[lastDayCities.length - 1] ?? ''
   form.hotelStars = initialData.details?.hotelStars ?? 3
+  form.adults = initialData.details?.adults ?? 2
+  form.children = initialData.details?.children ?? 0
+  form.rooms = initialData.details?.rooms ?? 1
+  const storedCurrency = isCurrency(initialData.details?.currencyCode) ? initialData.details.currencyCode : props.currencyCode
+  formCurrencyCode.value = storedCurrency
+  convertFormCurrency(storedCurrency, props.currencyCode)
   const stayCounts: Record<string, number> = {}
   cityStopsFromDetails.forEach((dayCities) => {
     const signature = dayCities.join(' -> ')
@@ -730,6 +781,23 @@ async function handleStartCityComplete(event: { query: string }) {
     startCitySuggestions.value = []
   } finally {
     startCitySearching.value = false
+  }
+}
+
+async function handleEndCityComplete(event: { query: string }) {
+  const query = event.query.trim()
+  if (query.length < 2) {
+    endCitySuggestions.value = []
+    return
+  }
+
+  endCitySearching.value = true
+  try {
+    endCitySuggestions.value = await searchCitiesWorldwide(query, currentLanguage.value)
+  } catch {
+    endCitySuggestions.value = []
+  } finally {
+    endCitySearching.value = false
   }
 }
 
@@ -1576,7 +1644,7 @@ async function buildAutoActivities(dayStops: string[][]) {
       }
 
       const mealIndex = mealCountsByCity[city] ?? 0
-      const mealPlan = getGeneratedMealPlan(city, mealIndex, form.countries[0])
+      const mealPlan = getGeneratedMealPlan(city, mealIndex, form.countries[0], getOccupancyInputs(), props.currencyCode)
       currentMinutes = addGeneratedActivity(
         activities,
         scheduledStartMinutes,
@@ -1585,7 +1653,12 @@ async function buildAutoActivities(dayStops: string[][]) {
         mealPlan.name
       )
       activities[activities.length - 1].cost = mealPlan.cost
-      activities[activities.length - 1].costDetails = getGeneratedMealCostDetails(city, mealIndex, form.countries[0])
+      activities[activities.length - 1].costDetails = getGeneratedMealCostDetails(
+        city,
+        mealIndex,
+        form.countries[0],
+        getOccupancyInputs()
+      )
       activities[activities.length - 1].estimatedCost = true
       mealCountsByCity[city] = mealIndex + 1
       currentMinutes = Math.min(dayEndMinutes, currentMinutes + 30)
@@ -1632,13 +1705,17 @@ async function buildAutoActivities(dayStops: string[][]) {
       activities[activities.length - 1].cost = getGeneratedVisitCost(
         city,
         visitIndex,
-        itineraryDays.value[dayIndex]?.isoDate
+        itineraryDays.value[dayIndex]?.isoDate,
+        getOccupancyInputs(),
+        props.currencyCode
       )
       activities[activities.length - 1].costDetails = getGeneratedVisitCostDetails(
         city,
         visitIndex,
         itineraryDays.value[dayIndex]?.isoDate,
-        formatMoney
+        formatMoney,
+        getOccupancyInputs(),
+        props.currencyCode
       )
       activities[activities.length - 1].estimatedCost = true
       visitCountsByCity[city] = visitIndex + getGeneratedVisitSiteCount(city, visitIndex)
@@ -1682,12 +1759,20 @@ async function buildAutoActivities(dayStops: string[][]) {
           'visit',
           formatVisitName(city, visitIndex)
         )
-        activities[activities.length - 1].cost = getGeneratedVisitCost(city, visitIndex, itineraryDays.value[dayIndex]?.isoDate)
+        activities[activities.length - 1].cost = getGeneratedVisitCost(
+          city,
+          visitIndex,
+          itineraryDays.value[dayIndex]?.isoDate,
+          getOccupancyInputs(),
+          props.currencyCode
+        )
         activities[activities.length - 1].costDetails = getGeneratedVisitCostDetails(
           city,
           visitIndex,
           itineraryDays.value[dayIndex]?.isoDate,
-          formatMoney
+          formatMoney,
+          getOccupancyInputs(),
+          props.currencyCode
         )
         activities[activities.length - 1].estimatedCost = true
         visitCountsByCity[city] = visitIndex + getGeneratedVisitSiteCount(city, visitIndex)
@@ -1740,9 +1825,12 @@ async function buildAutoActivities(dayStops: string[][]) {
           transportMode,
           distance,
           city,
+          nextCity,
           form.countries[0],
           itineraryDays.value[dayIndex]?.isoDate,
-          null
+          null,
+          getOccupancyInputs(),
+          props.currencyCode
         )
         let transportCostDetails = getEstimatedTransportCostDetails(
           transportMode,
@@ -1752,7 +1840,9 @@ async function buildAutoActivities(dayStops: string[][]) {
           form.countries[0],
           formatMoney,
           itineraryDays.value[dayIndex]?.isoDate,
-          null
+          null,
+          getOccupancyInputs(),
+          props.currencyCode
         )
         let transportDetail =
           transportMode === 'unknown'
@@ -1797,9 +1887,12 @@ async function buildAutoActivities(dayStops: string[][]) {
               transportMode,
               distance,
               city,
+              nextCity,
               form.countries[0],
               itineraryDays.value[dayIndex]?.isoDate,
-              reference
+              reference,
+              getOccupancyInputs(),
+              props.currencyCode
             )
             transportCostDetails = getEstimatedTransportCostDetails(
               transportMode,
@@ -1809,7 +1902,9 @@ async function buildAutoActivities(dayStops: string[][]) {
               form.countries[0],
               formatMoney,
               itineraryDays.value[dayIndex]?.isoDate,
-              reference
+              reference,
+              getOccupancyInputs(),
+              props.currencyCode
             )
           }
 
@@ -1899,13 +1994,17 @@ async function buildAutoActivities(dayStops: string[][]) {
       activities[activities.length - 1].cost = getGeneratedVisitCost(
         finalCity,
         visitIndex,
-        itineraryDays.value[dayIndex]?.isoDate
+        itineraryDays.value[dayIndex]?.isoDate,
+        getOccupancyInputs(),
+        props.currencyCode
       )
       activities[activities.length - 1].costDetails = getGeneratedVisitCostDetails(
         finalCity,
         visitIndex,
         itineraryDays.value[dayIndex]?.isoDate,
-        formatMoney
+        formatMoney,
+        getOccupancyInputs(),
+        props.currencyCode
       )
       activities[activities.length - 1].estimatedCost = true
       visitCountsByCity[finalCity] = visitIndex + getGeneratedVisitSiteCount(finalCity, visitIndex)
@@ -1932,7 +2031,9 @@ async function buildAutoAccommodations(dayStops: string[]) {
         normalizedCity,
         form.hotelStars,
         form.countries[0],
-        checkInDate
+        checkInDate,
+        getOccupancyInputs(),
+        props.currencyCode
       )
 
       const latestTransportArrival = form.dayActivities[dayIndex]
@@ -1953,7 +2054,9 @@ async function buildAutoAccommodations(dayStops: string[]) {
           normalizedCity,
           form.hotelStars,
           form.countries[0],
-          checkInDate
+          checkInDate,
+          getOccupancyInputs(),
+          props.currencyCode
         )
       }
     })
@@ -2112,7 +2215,15 @@ function handleAccommodationCheckInChange(dayIndex: number, value: string) {
 }
 
 function handleAccommodationTypeChange(dayIndex: number, value: string) {
-  ensureDayAccommodation(dayIndex).type = value || ''
+  const accommodation = ensureDayAccommodation(dayIndex)
+  accommodation.type = value || ''
+
+  if (accommodation.type === 'other') {
+    accommodation.checkInTime = ''
+    accommodation.name = ''
+    accommodation.cost = null
+    accommodation.costDetails = ''
+  }
 }
 
 function getAccommodationCheckInValue(dayIndex: number) {
@@ -2138,7 +2249,7 @@ function getAccommodationCostDetails(dayIndex: number) {
     const checkInDate = itineraryDays.value[dayIndex]?.isoDate
     if (!city || !checkInDate) return ''
 
-    return getGeneratedHotelCostDetails(city, form.hotelStars, form.countries[0], checkInDate)
+    return getGeneratedHotelCostDetails(city, form.hotelStars, form.countries[0], checkInDate, getOccupancyInputs(), props.currencyCode)
   }
 
   return ''
@@ -2476,7 +2587,11 @@ function handleSubmit() {
     budget: Number(form.budget ?? 0),
     details: {
       countries: [...form.countries],
+      currencyCode: props.currencyCode,
       hotelStars: form.hotelStars === null ? undefined : Number(form.hotelStars),
+      adults: form.adults === null ? undefined : Number(form.adults),
+      children: form.children === null ? undefined : Number(form.children),
+      rooms: form.rooms === null ? undefined : Number(form.rooms),
       dayPlans: itineraryDays.value.map((item) => ({
         day: item.day,
         date: item.isoDate,
@@ -2529,6 +2644,18 @@ watch(
     applyInitialData(initialData)
   },
   { immediate: true }
+)
+
+watch(
+  () => props.currencyCode,
+  (nextCurrency, previousCurrency) => {
+    if (!previousCurrency || nextCurrency === previousCurrency) {
+      formCurrencyCode.value = nextCurrency
+      return
+    }
+
+    convertFormCurrency(formCurrencyCode.value, nextCurrency)
+  }
 )
 </script>
 
@@ -2631,16 +2758,16 @@ watch(
             <AutoComplete
               :model-value="form.routeEndCity"
               @update:model-value="handleEndCityInput"
-              :suggestions="startCitySuggestions"
+              :suggestions="endCitySuggestions"
               option-label="label"
               :placeholder="props.texts.endCity"
               :force-selection="false"
               :virtual-scroller-options="{ itemSize: 36 }"
-              @complete="handleStartCityComplete"
+              @complete="handleEndCityComplete"
               class="city-picker"
               :disabled="!hasSelectedCountry"
               :dropdown="true"
-              :loading="startCitySearching"
+              :loading="endCitySearching"
             />
           </div>
         </div>
@@ -2662,21 +2789,39 @@ watch(
         </div>
 
         <div v-if="form.stayPreferences.length > 0" class="field-group">
-          <div class="stay-preferences-field">
-            <label>{{ props.texts.hotelStars }}</label>
-            <div class="hotel-stars-picker" role="radiogroup" :aria-label="props.texts.hotelStars">
-              <button
-                v-for="star in 5"
-                :key="`hotel-star-${star}`"
-                type="button"
-                :class="['hotel-star-button', { 'hotel-star-button-active': star <= (form.hotelStars ?? 0) }]"
-                :aria-label="`${star} star`"
-                :aria-checked="star === form.hotelStars"
-                role="radio"
-                @click="setHotelStars(star)"
-              >
-                <i :class="['pi', star <= (form.hotelStars ?? 0) ? 'pi-star-fill' : 'pi-star']" />
-              </button>
+          <div class="stay-preferences-field hotel-preferences-field">
+            <label>{{ props.texts.accommodationHotel }}</label>
+            <div class="hotel-preferences-row">
+              <div class="occupancy-grid">
+                <div class="field-group occupancy-field">
+                  <label>{{ props.texts.adults }}</label>
+                  <InputNumber v-model="form.adults" mode="decimal" :min="1" :max-fraction-digits="0" />
+                </div>
+                <div class="field-group occupancy-field">
+                  <label>{{ props.texts.children }}</label>
+                  <InputNumber v-model="form.children" mode="decimal" :min="0" :max-fraction-digits="0" />
+                </div>
+                <div class="field-group occupancy-field">
+                  <label>{{ props.texts.rooms }}</label>
+                  <InputNumber v-model="form.rooms" mode="decimal" :min="1" :max-fraction-digits="0" />
+                </div>
+              </div>
+              <div class="hotel-stars-group">
+                <div class="hotel-stars-picker" role="radiogroup" :aria-label="props.texts.hotelStars">
+                  <button
+                    v-for="star in 5"
+                    :key="`hotel-star-${star}`"
+                    type="button"
+                    :class="['hotel-star-button', { 'hotel-star-button-active': star <= (form.hotelStars ?? 0) }]"
+                    :aria-label="`${star} star`"
+                    :aria-checked="star === form.hotelStars"
+                    role="radio"
+                    @click="setHotelStars(star)"
+                  >
+                    <i :class="['pi', star <= (form.hotelStars ?? 0) ? 'pi-star-fill' : 'pi-star']" />
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
           <div class="stay-preferences-field">
@@ -3117,6 +3262,69 @@ watch(
 :deep(.city-picker:not(.p-disabled):hover .p-dropdown-trigger) {
   background: #ffe1ee;
   color: #8f0f46;
+}
+
+.hotel-preferences-row {
+  display: flex;
+  align-items: end;
+  gap: 1rem;
+  flex-wrap: nowrap;
+  width: 100%;
+}
+
+.hotel-preferences-field > label {
+  align-self: flex-start;
+  padding-top: 2rem;
+}
+
+.occupancy-grid {
+  display: flex;
+  align-items: end;
+  gap: 0.6rem;
+  flex-wrap: nowrap;
+  width: auto;
+}
+
+.hotel-stars-group {
+  display: inline-flex;
+  align-items: center;
+}
+
+.occupancy-field {
+  gap: 0.35rem;
+  width: 84px;
+  min-width: 84px;
+}
+
+.occupancy-field label {
+  font-size: 0.84rem;
+}
+
+.occupancy-field :deep(.p-inputnumber),
+.occupancy-field :deep(.p-inputtext) {
+  width: 84px;
+}
+
+@media (max-width: 768px) {
+  .hotel-preferences-row {
+    flex-wrap: wrap;
+    align-items: start;
+  }
+
+  .occupancy-grid {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .occupancy-field {
+    width: 96px;
+    min-width: 96px;
+  }
+
+  .occupancy-field :deep(.p-inputnumber),
+  .occupancy-field :deep(.p-inputtext) {
+    width: 96px;
+  }
 }
 
 </style>
