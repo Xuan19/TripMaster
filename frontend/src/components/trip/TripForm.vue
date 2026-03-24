@@ -284,28 +284,6 @@ function getFormattedMoneyTooltip(value: number | null | undefined) {
   return value === null || value === undefined ? '' : formatMoney(Number(value))
 }
 
-function getSelectedLabelsTooltip(
-  selectedValues: string[] | null | undefined,
-  options: Array<{ label: string; value: string }>
-) {
-  if (!selectedValues?.length) return ''
-
-  const labels = selectedValues
-    .map((selectedValue) => options.find((option) => option.value === selectedValue)?.label ?? selectedValue)
-    .filter((label) => label.trim().length > 0)
-
-  return labels.join(', ')
-}
-
-function getSelectedTextTooltip(selectedValues: string[] | null | undefined) {
-  return selectedValues?.filter((value) => value.trim().length > 0).join(', ') ?? ''
-}
-
-function getOptionLabelTooltip(value: string | null | undefined, options: Array<{ label: string; value: string }>) {
-  if (!value) return ''
-  return options.find((option) => option.value === value)?.label ?? value
-}
-
 watch(
   () => form.numberOfDays,
   (days) => {
@@ -2705,17 +2683,15 @@ watch(
 
         <div class="field-group">
           <label>{{ props.texts.country }}</label>
-          <div class="value-tooltip-host" :data-tooltip="getSelectedTextTooltip(form.countries)">
-            <MultiSelect
-              v-model="form.countries"
-              :options="countryOptions"
-              :placeholder="props.texts.country"
-              :show-toggle-all="false"
-              :filter="true"
-              display="chip"
-              :class="{ 'p-invalid': showCountryError }"
-            />
-          </div>
+          <MultiSelect
+            v-model="form.countries"
+            :options="countryOptions"
+            :placeholder="props.texts.country"
+            :show-toggle-all="false"
+            :filter="true"
+            display="chip"
+            :class="{ 'p-invalid': showCountryError }"
+          />
           <small v-if="showCountryError" class="field-error">Please select at least one country.</small>
           <div v-if="showCityLoader" class="city-loader">
             <ProgressSpinner style="width: 18px; height: 18px" stroke-width="6" />
@@ -2775,67 +2751,55 @@ watch(
         <div class="date-days-row">
           <div class="field-group compact-field">
             <label>{{ props.texts.startCity }}</label>
-            <div
-              class="value-tooltip-host"
-              :data-tooltip="getTooltipText(typeof startCityInputValue === 'string' ? startCityInputValue : startCityInputValue?.label)"
-            >
-              <AutoComplete
-                :model-value="startCityInputValue"
-                @update:model-value="handleStartCityInput"
-                :suggestions="startCitySuggestions"
-                option-label="label"
-                :placeholder="props.texts.startCity"
-                :force-selection="false"
-                :virtual-scroller-options="{ itemSize: 36 }"
-                @complete="handleStartCityComplete"
-                @item-select="handleStartCitySelect"
-                :disabled="!hasSelectedCountry"
-                :dropdown="true"
-                :loading="startCitySearching"
-                class="city-picker"
-              />
-            </div>
+            <AutoComplete
+              :model-value="startCityInputValue"
+              @update:model-value="handleStartCityInput"
+              :suggestions="startCitySuggestions"
+              option-label="label"
+              :placeholder="props.texts.startCity"
+              :force-selection="false"
+              :virtual-scroller-options="{ itemSize: 36 }"
+              @complete="handleStartCityComplete"
+              @item-select="handleStartCitySelect"
+              :disabled="!hasSelectedCountry"
+              :dropdown="true"
+              :loading="startCitySearching"
+              class="city-picker"
+            />
           </div>
 
           <div class="field-group compact-field">
             <label>{{ props.texts.endCity }}</label>
-            <div class="value-tooltip-host" :data-tooltip="getTooltipText(form.routeEndCity)">
-              <AutoComplete
-                :model-value="form.routeEndCity"
-                @update:model-value="handleEndCityInput"
-                :suggestions="endCitySuggestions"
-                option-label="label"
-                :placeholder="props.texts.endCity"
-                :force-selection="false"
-                :virtual-scroller-options="{ itemSize: 36 }"
-                @complete="handleEndCityComplete"
-                class="city-picker"
-                :disabled="!hasSelectedCountry"
-                :dropdown="true"
-                :loading="endCitySearching"
-              />
-            </div>
+            <AutoComplete
+              :model-value="form.routeEndCity"
+              @update:model-value="handleEndCityInput"
+              :suggestions="endCitySuggestions"
+              option-label="label"
+              :placeholder="props.texts.endCity"
+              :force-selection="false"
+              :virtual-scroller-options="{ itemSize: 36 }"
+              @complete="handleEndCityComplete"
+              class="city-picker"
+              :disabled="!hasSelectedCountry"
+              :dropdown="true"
+              :loading="endCitySearching"
+            />
           </div>
         </div>
 
         <div class="date-days-row">
           <div class="field-group compact-field">
             <label>{{ props.texts.transportModes }}</label>
-            <div
-              class="value-tooltip-host"
-              :data-tooltip="getSelectedLabelsTooltip(form.allowedTransportModes, transportModeOptions)"
-            >
-              <MultiSelect
-                v-model="form.allowedTransportModes"
-                :options="transportModeOptions"
-                option-label="label"
-                option-value="value"
-                :show-toggle-all="false"
-                display="chip"
-                :placeholder="props.texts.transportModes"
-                :disabled="!hasSelectedCountry"
-              />
-            </div>
+            <MultiSelect
+              v-model="form.allowedTransportModes"
+              :options="transportModeOptions"
+              option-label="label"
+              option-value="value"
+              :show-toggle-all="false"
+              display="chip"
+              :placeholder="props.texts.transportModes"
+              :disabled="!hasSelectedCountry"
+            />
           </div>
         </div>
 
@@ -2890,22 +2854,20 @@ watch(
                   :key="`stay-preference-primary-${index}`"
                   class="stay-preference-row"
                 >
-                  <div class="value-tooltip-host" :data-tooltip="getTooltipText(preference.city)">
-                    <AutoComplete
-                      :model-value="preference.city"
-                      @update:model-value="handleStayPreferenceCityInput(preference, $event as string | CitySearchSuggestion | null)"
-                      :suggestions="startCitySuggestions"
-                      option-label="label"
-                      :placeholder="props.texts.city"
-                      :force-selection="false"
-                      :virtual-scroller-options="{ itemSize: 36 }"
-                      @complete="handleStartCityComplete"
-                      class="city-picker"
-                      :disabled="!hasSelectedCountry"
-                      :dropdown="true"
-                      :loading="startCitySearching"
-                    />
-                  </div>
+                  <AutoComplete
+                    :model-value="preference.city"
+                    @update:model-value="handleStayPreferenceCityInput(preference, $event as string | CitySearchSuggestion | null)"
+                    :suggestions="startCitySuggestions"
+                    option-label="label"
+                    :placeholder="props.texts.city"
+                    :force-selection="false"
+                    :virtual-scroller-options="{ itemSize: 36 }"
+                    @complete="handleStartCityComplete"
+                    class="city-picker"
+                    :disabled="!hasSelectedCountry"
+                    :dropdown="true"
+                    :loading="startCitySearching"
+                  />
                   <div class="value-tooltip-host" :data-tooltip="getTooltipText(preference.days)">
                     <InputNumber
                       v-model="preference.days"
@@ -2933,22 +2895,20 @@ watch(
                   :key="`stay-preference-overflow-${overflowIndex + 2}`"
                   class="stay-preference-row"
                 >
-                  <div class="value-tooltip-host" :data-tooltip="getTooltipText(preference.city)">
-                    <AutoComplete
-                      :model-value="preference.city"
-                      @update:model-value="handleStayPreferenceCityInput(preference, $event as string | CitySearchSuggestion | null)"
-                      :suggestions="startCitySuggestions"
-                      option-label="label"
-                      :placeholder="props.texts.city"
-                      :force-selection="false"
-                      :virtual-scroller-options="{ itemSize: 36 }"
-                      @complete="handleStartCityComplete"
-                      class="city-picker"
-                      :disabled="!hasSelectedCountry"
-                      :dropdown="true"
-                      :loading="startCitySearching"
-                    />
-                  </div>
+                  <AutoComplete
+                    :model-value="preference.city"
+                    @update:model-value="handleStayPreferenceCityInput(preference, $event as string | CitySearchSuggestion | null)"
+                    :suggestions="startCitySuggestions"
+                    option-label="label"
+                    :placeholder="props.texts.city"
+                    :force-selection="false"
+                    :virtual-scroller-options="{ itemSize: 36 }"
+                    @complete="handleStartCityComplete"
+                    class="city-picker"
+                    :disabled="!hasSelectedCountry"
+                    :dropdown="true"
+                    :loading="startCitySearching"
+                  />
                   <div class="value-tooltip-host" :data-tooltip="getTooltipText(preference.days)">
                     <InputNumber
                       v-model="preference.days"
@@ -3018,23 +2978,21 @@ watch(
                       @dragstart="handleCityDragStart($event, item.index, cityIndex)"
                       @dragend="handleCityDragEnd"
                     />
-                    <div class="value-tooltip-host" :data-tooltip="getTooltipText(form.cityStops[item.index][cityIndex])">
-                      <AutoComplete
-                        :model-value="form.cityStops[item.index][cityIndex]"
-                        @update:model-value="handleCityStopChange(item.index, cityIndex, $event as string | CitySearchSuggestion | null)"
-                        :suggestions="startCitySuggestions"
-                        option-label="label"
-                        :placeholder="allCitiesLoaded ? props.texts.city : props.texts.loadingCities"
-                        :force-selection="false"
-                        :virtual-scroller-options="{ itemSize: 36 }"
-                        @complete="handleStartCityComplete"
-                        class="city-select city-picker"
-                        :disabled="!allCitiesLoaded"
-                        :dropdown="true"
-                        :loading="!allCitiesLoaded || startCitySearching"
-                        :style="{ width: getCitySelectWidth(form.cityStops[item.index][cityIndex]) }"
-                      />
-                    </div>
+                    <AutoComplete
+                      :model-value="form.cityStops[item.index][cityIndex]"
+                      @update:model-value="handleCityStopChange(item.index, cityIndex, $event as string | CitySearchSuggestion | null)"
+                      :suggestions="startCitySuggestions"
+                      option-label="label"
+                      :placeholder="allCitiesLoaded ? props.texts.city : props.texts.loadingCities"
+                      :force-selection="false"
+                      :virtual-scroller-options="{ itemSize: 36 }"
+                      @complete="handleStartCityComplete"
+                      class="city-select city-picker"
+                      :disabled="!allCitiesLoaded"
+                      :dropdown="true"
+                      :loading="!allCitiesLoaded || startCitySearching"
+                      :style="{ width: getCitySelectWidth(form.cityStops[item.index][cityIndex]) }"
+                    />
                     <Button
                       v-if="form.cityStops[item.index].length > 1"
                       type="button"
@@ -3139,15 +3097,13 @@ watch(
                     getActivityDurationLabel(activity)
                   }}</span>
                 </div>
-                <div class="value-tooltip-host" :data-tooltip="getOptionLabelTooltip(activity.type, activityTypeOptions)">
-                  <Dropdown
-                    v-model="activity.type"
-                    :options="activityTypeOptions"
-                    option-label="label"
-                    option-value="value"
-                    :placeholder="props.texts.activityType"
-                  />
-                </div>
+                <Dropdown
+                  v-model="activity.type"
+                  :options="activityTypeOptions"
+                  option-label="label"
+                  option-value="value"
+                  :placeholder="props.texts.activityType"
+                />
                 <div class="value-tooltip-host" :data-tooltip="activity.name || props.texts.activityName">
                   <InputText
                     v-model="activity.name"
@@ -3198,20 +3154,15 @@ watch(
 		                      <i class="pi pi-home accommodation-heading-icon" />
 		                      <span>{{ props.texts.accommodation }}</span>
 		                    </small>
-		                    <div
-                          class="value-tooltip-host"
-                          :data-tooltip="getOptionLabelTooltip(ensureDayAccommodation(item.index).type, accommodationTypeOptions)"
-                        >
-		                      <Dropdown
-		                        class="accommodation-top-select"
-		                        :model-value="ensureDayAccommodation(item.index).type"
-		                        :options="accommodationTypeOptions"
-		                        option-label="label"
-		                        option-value="value"
-		                        :placeholder="props.texts.accommodationType"
-		                        @update:model-value="handleAccommodationTypeChange(item.index, String($event ?? ''))"
-		                      />
-                        </div>
+		                    <Dropdown
+		                      class="accommodation-top-select"
+		                      :model-value="ensureDayAccommodation(item.index).type"
+		                      :options="accommodationTypeOptions"
+		                      option-label="label"
+		                      option-value="value"
+		                      :placeholder="props.texts.accommodationType"
+		                      @update:model-value="handleAccommodationTypeChange(item.index, String($event ?? ''))"
+		                    />
 		                  </div>
 		                  <div class="accommodation-checkin-field">
 		                    <small>{{ props.texts.accommodationCheckIn }}</small>
@@ -3355,6 +3306,8 @@ watch(
   position: relative;
   display: block;
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .value-tooltip-host[data-tooltip]:not([data-tooltip='']):hover::after,
@@ -3448,19 +3401,29 @@ watch(
     align-items: start;
   }
 
+  .hotel-preferences-field > label {
+    padding-top: 0;
+  }
+
   .occupancy-grid {
     width: 100%;
     flex-wrap: wrap;
+    gap: 0.5rem;
   }
 
   .occupancy-field {
-    width: 96px;
-    min-width: 96px;
+    flex: 1 1 calc(50% - 0.5rem);
+    width: auto;
+    min-width: 0;
   }
 
   .occupancy-field :deep(.p-inputnumber),
   .occupancy-field :deep(.p-inputtext) {
-    width: 96px;
+    width: 100%;
+  }
+
+  .hotel-stars-group {
+    width: 100%;
   }
 }
 

@@ -256,11 +256,19 @@ body {
   display: grid;
   column-gap: 0.35rem;
   row-gap: 0.45rem;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
 }
 
 .field-group label {
   font-size: 0.92rem;
   color: var(--tm-text);
+}
+
+.field-group > * {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .field-label-row {
@@ -440,6 +448,7 @@ body {
   gap: var(--stay-pair-gap);
   align-items: center;
   flex: 0 0 auto;
+  min-width: 0;
 }
 
 .add-stay-preference-btn.p-button {
@@ -529,6 +538,13 @@ body {
   background: var(--tm-surface);
   border: 1px solid var(--tm-border);
   border-radius: 12px;
+  min-width: 0;
+  overflow-x: clip;
+}
+
+.trip-form > * {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .trip-form-layout {
@@ -1001,6 +1017,7 @@ body {
 
 .activity-row > * {
   min-width: 0;
+  max-width: 100%;
 }
 
 .activity-row-dragging {
@@ -1272,6 +1289,11 @@ body {
     gap: 0.45rem;
   }
 
+  .stay-preference-row {
+    grid-template-columns: minmax(0, 1fr) 5.25rem 2rem;
+    width: 100%;
+  }
+
   .hotel-stars-picker {
     width: fit-content;
   }
@@ -1388,6 +1410,7 @@ body {
 body,
 #app {
   min-height: 100vh;
+  overflow-x: clip;
 }
 
 .app-shell {
@@ -1414,6 +1437,7 @@ body,
   display: flex;
   align-items: center;
   gap: 1rem;
+  min-width: 0;
 }
 
 .brand-logo {
@@ -1467,7 +1491,8 @@ body,
 }
 
 .compact-select {
-  min-width: 130px;
+  min-width: 0;
+  width: 100%;
 }
 
 .compact-select .p-dropdown-label {
@@ -1557,6 +1582,18 @@ body,
 }
 
 @media (max-width: 700px) {
+  .app-header {
+    overflow-x: clip;
+  }
+
+  .brand-block {
+    gap: 0.75rem;
+  }
+
+  .brand-logo {
+    transform: none;
+  }
+
   .brand-name {
     font-size: 0.9rem;
   }
