@@ -30,6 +30,7 @@ export interface TripDayDetails {
 export interface TripPlanDetails {
   countries: string[]
   currencyCode?: Currency
+  allowedTransportModes?: string[]
   hotelStars?: number
   adults?: number
   children?: number

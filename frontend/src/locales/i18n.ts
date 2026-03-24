@@ -68,6 +68,9 @@ export interface UiTexts {
   upcomingTrips: string
   noTrips: string
   tripDetails: string
+  tripOverview: string
+  tripPreferences: string
+  costSummary: string
   noTripDetails: string
   savedCities: string
   savedActivities: string
@@ -204,6 +207,9 @@ export const translations: Record<Language, UiTexts> = {
     upcomingTrips: 'Upcoming trips',
     noTrips: 'No trips yet.',
     tripDetails: 'Trip details',
+    tripOverview: 'Overview',
+    tripPreferences: 'Preferences',
+    costSummary: 'Cost summary',
     noTripDetails: 'No saved itinerary details for this trip.',
     savedCities: 'Cities',
     savedActivities: 'Activities',
@@ -279,6 +285,9 @@ export const translations: Record<Language, UiTexts> = {
     upcomingTrips: 'Voyages a venir',
     noTrips: 'Aucun voyage pour le moment.',
     tripDetails: 'Details du voyage',
+    tripOverview: 'Vue d ensemble',
+    tripPreferences: 'Preferences',
+    costSummary: 'Resume des couts',
     noTripDetails: 'Aucun detail enregistre pour ce voyage.',
     savedCities: 'Villes',
     savedActivities: 'Activites',
@@ -354,6 +363,9 @@ export const translations: Record<Language, UiTexts> = {
     upcomingTrips: '即将开始的旅行',
     noTrips: '暂无旅行。',
     tripDetails: '旅行详情',
+    tripOverview: '概览',
+    tripPreferences: '偏好设置',
+    costSummary: '费用汇总',
     noTripDetails: '此旅行暂无已保存的行程详情。',
     savedCities: '城市',
     savedActivities: '活动',

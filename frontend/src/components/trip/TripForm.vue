@@ -695,7 +695,10 @@ function applyInitialData(initialData: TripFormInitialData | null) {
   form.startDate = parseIsoDate(initialData.startDate)
   form.numberOfDays = dayCount
   form.budget = initialData.budget
-  form.allowedTransportModes = [...defaultAllowedTransportModes]
+  form.allowedTransportModes =
+    initialData.details?.allowedTransportModes
+      ?.filter((mode): mode is TransportMode => defaultAllowedTransportModes.includes(mode as TransportMode))
+      .slice() ?? [...defaultAllowedTransportModes]
   form.stayPreferences = []
 
   const cityStopsFromDetails =
@@ -2609,6 +2612,7 @@ function handleSubmit() {
     details: {
       countries: [...form.countries],
       currencyCode: props.currencyCode,
+      allowedTransportModes: [...form.allowedTransportModes],
       hotelStars: form.hotelStars === null ? undefined : Number(form.hotelStars),
       adults: form.adults === null ? undefined : Number(form.adults),
       children: form.children === null ? undefined : Number(form.children),
@@ -2800,7 +2804,7 @@ watch(
         </div>
 
         <div class="date-days-row">
-          <div class="field-group compact-field">
+          <div class="field-group compact-field transport-modes-field">
             <label>{{ props.texts.transportModes }}</label>
             <MultiSelect
               v-model="form.allowedTransportModes"
@@ -2811,6 +2815,7 @@ watch(
               display="chip"
               :placeholder="props.texts.transportModes"
               :disabled="!hasSelectedCountry"
+              class="transport-modes-select"
             />
           </div>
         </div>
@@ -3427,6 +3432,52 @@ watch(
 .occupancy-field :deep(.p-inputnumber),
 .occupancy-field :deep(.p-inputtext) {
   width: 84px;
+}
+
+@media (min-width: 769px) {
+  .transport-modes-field {
+    width: fit-content;
+    max-width: 100%;
+    justify-self: start;
+  }
+
+  .transport-modes-field :deep(.transport-modes-select.p-multiselect) {
+    width: max-content;
+    max-width: 100%;
+  }
+
+  :deep(.transport-modes-select.p-multiselect) {
+    align-items: center;
+  }
+
+  :deep(.transport-modes-select .p-multiselect-label-container) {
+    overflow: hidden;
+  }
+
+  :deep(.transport-modes-select .p-multiselect-label) {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 0.35rem;
+    overflow: hidden;
+    text-overflow: initial;
+    white-space: nowrap;
+    align-items: center;
+    min-height: 2.5rem;
+    padding-top: 0.35rem;
+    padding-bottom: 0.35rem;
+  }
+
+  :deep(.transport-modes-select .p-multiselect-token) {
+    margin: 0;
+    flex: 0 0 auto;
+    max-width: none;
+  }
+
+  :deep(.transport-modes-select .p-multiselect-token-label) {
+    overflow: visible;
+    text-overflow: initial;
+    white-space: nowrap;
+  }
 }
 
 @media (max-width: 768px) {

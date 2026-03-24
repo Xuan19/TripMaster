@@ -369,6 +369,10 @@ function openTripInEditor(tripId: number) {
   void router.push({ name: 'trip-edit', params: { id: String(tripId) } })
 }
 
+function openTripDetails(tripId: number) {
+  void router.push({ name: 'trip-details', params: { id: String(tripId) } })
+}
+
 function handleDeleteTrip(tripId: number) {
   confirm.require({
     message: texts.value.deleteTripConfirm,
@@ -380,7 +384,7 @@ function handleDeleteTrip(tripId: number) {
     accept: async () => {
       try {
         await deleteTrip(tripId)
-        if (route.name === 'trip-edit' && route.params.id === String(tripId)) {
+        if ((route.name === 'trip-edit' || route.name === 'trip-details') && route.params.id === String(tripId)) {
           await router.push({ name: 'home' })
         }
         await loadSidebarTrips()
@@ -524,8 +528,8 @@ provide(appUiContextKey, {
                   rounded
                   icon="pi pi-eye"
                   class="trip-preview-btn"
-                  v-tooltip.left="formatTripPreview(trip)"
                   :aria-label="texts.tripDetails"
+                  @click.stop="openTripDetails(trip.id)"
                 />
                 <Button
                   type="button"
