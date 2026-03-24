@@ -1777,6 +1777,14 @@ body,
   background: #ffe6f1;
 }
 
+.trip-export-pdf-btn.p-button {
+  color: #b91c1c;
+}
+
+.trip-export-pdf-btn.p-button:enabled:hover {
+  background: #fee2e2;
+}
+
 .sidebar-edit-btn.p-button {
   justify-self: start;
   margin-top: 0;

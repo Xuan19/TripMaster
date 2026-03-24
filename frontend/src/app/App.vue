@@ -106,7 +106,7 @@ function buildTripCostSummary(trip: Trip) {
   return { rows, total }
 }
 
-function buildTripWordHtml(trip: Trip) {
+function buildTripDocumentHtml(trip: Trip) {
   const dayPlans = trip.details?.dayPlans ?? []
   const costSummary = buildTripCostSummary(trip)
   const daySections = dayPlans.length
@@ -229,7 +229,7 @@ function buildTripWordHtml(trip: Trip) {
 }
 
 function exportTripToWord(trip: Trip) {
-  const html = buildTripWordHtml(trip)
+  const html = buildTripDocumentHtml(trip)
   const blob = new Blob([`\ufeff${html}`], { type: 'application/msword;charset=utf-8' })
   const downloadUrl = URL.createObjectURL(blob)
   const link = document.createElement('a')
@@ -239,6 +239,58 @@ function exportTripToWord(trip: Trip) {
   link.click()
   document.body.removeChild(link)
   URL.revokeObjectURL(downloadUrl)
+}
+
+function exportTripToPdf(trip: Trip) {
+  const html = buildTripDocumentHtml(trip)
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+  const blobUrl = URL.createObjectURL(blob)
+  const iframe = document.createElement('iframe')
+
+  iframe.style.position = 'fixed'
+  iframe.style.right = '0'
+  iframe.style.bottom = '0'
+  iframe.style.width = '0'
+  iframe.style.height = '0'
+  iframe.style.border = '0'
+  iframe.setAttribute('aria-hidden', 'true')
+  iframe.src = blobUrl
+
+  const cleanup = () => {
+    iframe.remove()
+    URL.revokeObjectURL(blobUrl)
+  }
+
+  iframe.onload = () => {
+    const frameWindow = iframe.contentWindow
+    if (!frameWindow) {
+      cleanup()
+      return
+    }
+
+    let cleanedUp = false
+    const cleanupOnce = () => {
+      if (cleanedUp) return
+      cleanedUp = true
+      cleanup()
+    }
+
+    frameWindow.addEventListener(
+      'afterprint',
+      () => {
+        cleanupOnce()
+      },
+      { once: true }
+    )
+
+    frameWindow.setTimeout(() => {
+      frameWindow.focus()
+      frameWindow.print()
+      frameWindow.setTimeout(cleanupOnce, 1000)
+    }, 300)
+  }
+
+  document.body.appendChild(iframe)
 }
 
 function goToCreateTrip() {
@@ -456,6 +508,15 @@ provide(appUiContextKey, {
                   class="trip-export-btn"
                   :aria-label="texts.exportWord"
                   @click.stop="exportTripToWord(trip)"
+                />
+                <Button
+                  type="button"
+                  text
+                  rounded
+                  icon="pi pi-file-pdf"
+                  class="trip-export-btn trip-export-pdf-btn"
+                  :aria-label="texts.exportPdf"
+                  @click.stop="exportTripToPdf(trip)"
                 />
                 <Button
                   type="button"
