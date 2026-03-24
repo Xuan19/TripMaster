@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, ref } from 'vue'
 import Message from 'primevue/message'
 import TripForm from './TripForm.vue'
-import { createTrip, getTrips } from '../../services/api/tripsApi'
+import { createTrip } from '../../services/api/tripsApi'
 import type { Currency, TripFormTexts } from '../../locales/i18n'
 import type { TripFormSubmitPayload } from './types'
 
@@ -22,21 +22,15 @@ const errorMessage = computed(() => (hasCreateError.value ? props.texts.createEr
 const successMessage = computed(() => (hasCreateSuccess.value ? props.texts.createSuccess : ''))
 let successTimer: ReturnType<typeof setTimeout> | null = null
 
-async function getDefaultTripName() {
-  try {
-    const trips = await getTrips()
-    const usedIndexes = trips
-      .map((trip) => {
-        const match = /^trip\s+(\d+)$/i.exec(trip.name.trim())
-        return match ? Number(match[1]) : null
-      })
-      .filter((value): value is number => value !== null && Number.isFinite(value))
+function getDefaultTripName(payload: TripFormSubmitPayload) {
+  const countries = payload.details.countries
+    .map((country) => country.trim())
+    .filter((country) => country.length > 0)
+  const countryLabel = countries.length > 0 ? countries.join(', ') : payload.country.trim() || 'Trip'
+  const dayCount = Math.max(1, payload.details.dayPlans.length)
+  const dayLabel = `${dayCount} day${dayCount === 1 ? '' : 's'}`
 
-    const nextIndex = usedIndexes.length ? Math.max(...usedIndexes) + 1 : 1
-    return `Trip ${nextIndex}`
-  } catch {
-    return 'Trip 1'
-  }
+  return `${countryLabel} - ${dayLabel}`
 }
 
 async function handleCreate(payload: TripFormSubmitPayload) {
@@ -45,7 +39,7 @@ async function handleCreate(payload: TripFormSubmitPayload) {
     hasCreateError.value = false
     hasCreateSuccess.value = false
     isSaving.value = true
-    const normalizedName = payload.name.trim().length > 0 ? payload.name.trim() : await getDefaultTripName()
+    const normalizedName = payload.name.trim().length > 0 ? payload.name.trim() : getDefaultTripName(payload)
     await createTrip({
       ...payload,
       name: normalizedName

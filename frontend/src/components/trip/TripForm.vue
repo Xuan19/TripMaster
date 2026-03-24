@@ -1071,7 +1071,8 @@ function buildStayFocusedCityStops(orderedRoute: CityCandidate[], dayCount: numb
   let cursor = 0
   while (remainingExtraDays > 0 && stayPriority.length > 0) {
     const target = stayPriority[cursor % stayPriority.length]
-    plannedDays.splice(target.index + 1, 0, target.city.name)
+    const insertAfterIndex = plannedDays.lastIndexOf(target.city.name)
+    plannedDays.splice(insertAfterIndex >= 0 ? insertAfterIndex + 1 : plannedDays.length, 0, target.city.name)
     remainingExtraDays -= 1
     cursor += 1
   }
