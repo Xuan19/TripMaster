@@ -40,6 +40,10 @@ export interface UiTexts {
   accommodationOther: string
   loadingCities: string
   autoFillCities: string
+  itineraryMap: string
+  generateItineraryMap: string
+  itineraryMapEmpty: string
+  itineraryMapError: string
   addActivity: string
   activityStartTime: string
   activityEndTime: string
@@ -112,6 +116,10 @@ export type TripFormTexts = Pick<
   | 'accommodationOther'
   | 'loadingCities'
   | 'autoFillCities'
+  | 'itineraryMap'
+  | 'generateItineraryMap'
+  | 'itineraryMapEmpty'
+  | 'itineraryMapError'
   | 'addActivity'
   | 'activityStartTime'
   | 'activityEndTime'
@@ -180,6 +188,10 @@ export const translations: Record<Language, UiTexts> = {
     accommodationOther: 'Other',
     loadingCities: 'Loading cities...',
     autoFillCities: 'Generate itinerary',
+    itineraryMap: 'Itinerary map',
+    generateItineraryMap: 'Show route map',
+    itineraryMapEmpty: 'Add at least two cities to generate the itinerary map.',
+    itineraryMapError: 'Could not generate the itinerary map for these cities.',
     addActivity: 'Add activity',
     activityStartTime: 'Start time',
     activityEndTime: 'End time',
@@ -259,6 +271,10 @@ export const translations: Record<Language, UiTexts> = {
     accommodationOther: 'Autre',
     loadingCities: 'Chargement des villes...',
     autoFillCities: 'Generer l itineraire',
+    itineraryMap: 'Carte de l itineraire',
+    generateItineraryMap: 'Afficher la carte',
+    itineraryMapEmpty: 'Ajoutez au moins deux villes pour generer la carte de l itineraire.',
+    itineraryMapError: 'Impossible de generer la carte pour ces villes.',
     addActivity: 'Ajouter une activite',
     activityStartTime: 'Heure de debut',
     activityEndTime: 'Heure de fin',
@@ -338,6 +354,10 @@ export const translations: Record<Language, UiTexts> = {
     accommodationOther: '其他',
     loadingCities: '正在加载城市...',
     autoFillCities: '生成行程',
+    itineraryMap: '行程地图',
+    generateItineraryMap: '显示路线图',
+    itineraryMapEmpty: '至少添加两个城市后才能生成行程地图。',
+    itineraryMapError: '这些城市暂时无法生成行程地图。',
     addActivity: '添加活动',
     activityStartTime: '开始时间',
     activityEndTime: '结束时间',

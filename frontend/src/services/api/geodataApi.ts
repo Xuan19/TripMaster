@@ -8,6 +8,19 @@ interface RestCountry {
   }
 }
 
+interface GeoJsonGeometry {
+  type?: string
+  coordinates?: unknown
+}
+
+interface GeoJsonFeature {
+  geometry?: GeoJsonGeometry
+}
+
+interface GeoJsonFeatureCollection {
+  features?: GeoJsonFeature[]
+}
+
 interface CountriesNowCitiesResponse {
   error: boolean
   data: string[]
@@ -19,15 +32,21 @@ export interface CitySearchSuggestion {
   label: string
 }
 
+export interface CountryBoundaryPolygon {
+  rings: Array<Array<{ lat: number; lon: number }>>
+}
+
 const citiesCache = new Map<string, string[]>()
 const citySearchCache = new Map<string, CitySearchSuggestion[]>()
 const coordinatesCache = new Map<string, { lat: number; lon: number } | null>()
 const timeZoneCache = new Map<string, string | null>()
 const countryCache = new Map<string, string | null>()
+const boundaryCache = new Map<string, CountryBoundaryPolygon[] | null>()
 const distanceCache = new Map<string, number | null>()
 const pendingCoordinatesCache = new Map<string, Promise<{ lat: number; lon: number } | null>>()
 const pendingTimeZoneCache = new Map<string, Promise<string | null>>()
 const pendingCountryCache = new Map<string, Promise<string | null>>()
+const pendingBoundaryCache = new Map<string, Promise<CountryBoundaryPolygon[] | null>>()
 const pendingDistanceCache = new Map<string, Promise<number | null>>()
 let countriesCache: RestCountry[] | null = null
 let pendingCountriesRequest: Promise<RestCountry[]> | null = null
@@ -127,6 +146,44 @@ async function getCountriesMetadata(): Promise<RestCountry[]> {
   }
 }
 
+function normalizeCountryName(value: string) {
+  return value.trim().toLowerCase()
+}
+
+function parseBoundaryGeometry(geometry: GeoJsonGeometry | undefined): CountryBoundaryPolygon[] {
+  if (!geometry?.type || !geometry.coordinates) return []
+
+  const toRing = (ring: unknown) => {
+    if (!Array.isArray(ring)) return []
+
+    return ring
+      .map((point) => {
+        if (!Array.isArray(point) || point.length < 2) return null
+        const [lon, lat] = point
+        if (typeof lat !== 'number' || typeof lon !== 'number') return null
+        return { lat, lon }
+      })
+      .filter((point): point is { lat: number; lon: number } => point !== null)
+  }
+
+  if (geometry.type === 'Polygon' && Array.isArray(geometry.coordinates)) {
+    const rings = geometry.coordinates.map(toRing).filter((ring) => ring.length >= 3)
+    return rings.length ? [{ rings }] : []
+  }
+
+  if (geometry.type === 'MultiPolygon' && Array.isArray(geometry.coordinates)) {
+    return geometry.coordinates
+      .map((polygon) => {
+        if (!Array.isArray(polygon)) return null
+        const rings = polygon.map(toRing).filter((ring) => ring.length >= 3)
+        return rings.length ? { rings } : null
+      })
+      .filter((polygon): polygon is CountryBoundaryPolygon => polygon !== null)
+  }
+
+  return []
+}
+
 export async function getCitiesByCountry(country: string, language: Language = 'en'): Promise<string[]> {
   const cacheKey = `${country}::${language}`
   const cached = citiesCache.get(cacheKey)
@@ -140,6 +197,42 @@ export async function getCitiesByCountry(country: string, language: Language = '
   const cities = data.error ? [] : sortUnique((data.data ?? []).map((city) => localizeCityName(city, language)))
   citiesCache.set(cacheKey, cities)
   return cities
+}
+
+export async function getCountryBoundary(country: string): Promise<CountryBoundaryPolygon[] | null> {
+  const normalizedCountry = normalizeCountryName(country)
+  if (!normalizedCountry) return null
+  if (boundaryCache.has(normalizedCountry)) return boundaryCache.get(normalizedCountry) ?? null
+  const pending = pendingBoundaryCache.get(normalizedCountry)
+  if (pending) return pending
+
+  const request = (async () => {
+    const countries = await getCountriesMetadata()
+    const match = countries.find((item) => normalizeCountryName(item.name?.common ?? '') === normalizedCountry)
+    const code = match?.cca2?.trim().toUpperCase()
+
+    if (!code) {
+      boundaryCache.set(normalizedCountry, null)
+      return null
+    }
+
+    const url = `https://raw.githubusercontent.com/johan/world.geo.json/master/countries/${code}.geo.json`
+    const { data } = await axios.get<GeoJsonFeatureCollection>(url)
+    const polygons = (data.features ?? []).flatMap((feature) => parseBoundaryGeometry(feature.geometry))
+    const result = polygons.length ? polygons : null
+    boundaryCache.set(normalizedCountry, result)
+    return result
+  })().catch(() => {
+    boundaryCache.set(normalizedCountry, null)
+    return null
+  })
+
+  pendingBoundaryCache.set(normalizedCountry, request)
+  try {
+    return await request
+  } finally {
+    pendingBoundaryCache.delete(normalizedCountry)
+  }
 }
 
 interface OpenMeteoResult {
@@ -282,7 +375,7 @@ function haversineKm(a: { lat: number; lon: number }, b: { lat: number; lon: num
   return 2 * earthRadius * Math.asin(Math.sqrt(h))
 }
 
-async function resolveCityCoordinates(
+export async function resolveCityCoordinates(
   city: string,
   countries: string[],
   language: Language = 'en'

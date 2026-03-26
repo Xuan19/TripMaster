@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { computed, inject, onMounted, reactive, ref, watch } from 'vue'
+import { computed, inject, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import AutoComplete from 'primevue/autocomplete'
 import Button from 'primevue/button'
 import Calendar from 'primevue/calendar'
+import Dialog from 'primevue/dialog'
 import Dropdown from 'primevue/dropdown'
 import InputNumber from 'primevue/inputnumber'
 import InputText from 'primevue/inputtext'
+import L from 'leaflet'
 import MultiSelect from 'primevue/multiselect'
 import ProgressSpinner from 'primevue/progressspinner'
 import { localeByLanguage, type Currency, type TripFormTexts } from '../../locales/i18n'
@@ -33,11 +35,14 @@ import {
 } from './tripEstimation'
 import type { TransportMode } from './tripEstimation'
 import {
+  type CountryBoundaryPolygon,
   type CitySearchSuggestion,
   getAllCountries,
+  getCountryBoundary,
   getCitiesByCountry,
   getDistanceBetweenCities,
   localizeCityName,
+  resolveCityCoordinates,
   resolveCityCountry,
   resolveCityTimeZone,
   searchCitiesWorldwide
@@ -79,6 +84,17 @@ interface GeneratedDayPlan {
   activities: DayActivity[]
   finalReachedCity: string
   reachedCities: string[]
+}
+
+interface ItineraryMapPoint {
+  name: string
+  lat: number
+  lon: number
+}
+
+interface ItineraryMapBoundary {
+  country: string
+  polygons: CountryBoundaryPolygon[]
 }
 
 const defaultAllowedTransportModes: TransportMode[] = ['walk', 'local', 'train', 'drive', 'flight']
@@ -136,7 +152,15 @@ const cityLoaderVisible = ref(false)
 const expandedDays = ref<Record<number, boolean>>({})
 const autoFillingCities = ref(false)
 const activityLoadingByDay = ref<Record<number, boolean>>({})
+const itineraryMapVisible = ref(false)
+const itineraryMapLoading = ref(false)
+const itineraryMapError = ref('')
+const itineraryMapPoints = ref<ItineraryMapPoint[]>([])
+const itineraryMapBoundaries = ref<ItineraryMapBoundary[]>([])
+const itineraryMapContainer = ref<HTMLElement | null>(null)
 const skipCountryReset = ref(false)
+let itineraryLeafletMap: L.Map | null = null
+let itineraryLeafletLayerGroup: L.LayerGroup | null = null
 let distanceDebounceTimer: ReturnType<typeof setTimeout> | null = null
 let cityLoaderTimer: ReturnType<typeof setTimeout> | null = null
 const formCurrencyCode = ref<Currency>(props.currencyCode)
@@ -253,6 +277,27 @@ const itineraryDays = computed(() => {
   })
 })
 
+const itineraryRouteCities = computed(() => {
+  const route: string[] = []
+
+  const pushCity = (value: string) => {
+    const city = value.trim()
+    if (!city) return
+
+    const previous = route[route.length - 1]
+    if (previous?.toLowerCase() === city.toLowerCase()) return
+    route.push(city)
+  }
+
+  pushCity(form.routeStartCity)
+  form.cityStops.forEach((dayStops) => dayStops.forEach(pushCity))
+  pushCity(form.routeEndCity)
+
+  return route
+})
+
+const canGenerateItineraryMap = computed(() => itineraryRouteCities.value.length >= 2)
+
 const activityTypeOptions = computed(() => [
   { value: 'visit', label: props.texts.activityVisit },
   { value: 'meal', label: props.texts.activityMeal },
@@ -303,6 +348,143 @@ function dateValueToTimeString(value: Date | Date[] | string | null | undefined)
 function getFormattedMoneyTooltip(value: number | null | undefined) {
   return value === null || value === undefined ? '' : formatMoney(Number(value))
 }
+
+function ensureItineraryMap() {
+  if (!itineraryMapContainer.value) return null
+
+  if (!itineraryLeafletMap) {
+    itineraryLeafletMap = L.map(itineraryMapContainer.value, {
+      zoomControl: true,
+      scrollWheelZoom: true
+    })
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(itineraryLeafletMap)
+
+    itineraryLeafletLayerGroup = L.layerGroup().addTo(itineraryLeafletMap)
+  }
+
+  return itineraryLeafletMap
+}
+
+async function renderItineraryMap() {
+  await nextTick()
+
+  const map = ensureItineraryMap()
+  if (!map || !itineraryLeafletLayerGroup) return
+
+  itineraryLeafletLayerGroup.clearLayers()
+
+  const bounds = L.latLngBounds([])
+
+  itineraryMapBoundaries.value.forEach((boundary) => {
+    boundary.polygons.forEach((polygon) => {
+      polygon.rings.forEach((ring) => {
+        const latLngs = ring.map((point) => L.latLng(point.lat, point.lon))
+        if (latLngs.length < 3) return
+        L.polygon(latLngs, {
+          color: '#94a3b8',
+          weight: 1,
+          fillColor: '#ffffff',
+          fillOpacity: 0.3
+        }).addTo(itineraryLeafletLayerGroup!)
+        bounds.extend(L.latLngBounds(latLngs))
+      })
+    })
+  })
+
+  const routeLatLngs = itineraryMapPoints.value.map((point) => L.latLng(point.lat, point.lon))
+  if (routeLatLngs.length > 1) {
+    L.polyline(routeLatLngs, {
+      color: '#c2410c',
+      weight: 4,
+      opacity: 0.9
+    }).addTo(itineraryLeafletLayerGroup)
+  }
+
+  itineraryMapPoints.value.forEach((point, index) => {
+    const latLng = L.latLng(point.lat, point.lon)
+    bounds.extend(latLng)
+
+    const marker = L.marker(latLng, {
+      icon: L.divIcon({
+        className: 'itinerary-map-marker',
+        html: `<span>${index + 1}</span>`,
+        iconSize: [28, 28],
+        iconAnchor: [14, 14]
+      })
+    })
+
+    marker.bindTooltip(point.name, {
+      direction: 'top',
+      offset: [0, -12]
+    })
+    marker.addTo(itineraryLeafletLayerGroup)
+  })
+
+  if (bounds.isValid()) {
+    map.fitBounds(bounds.pad(0.18))
+  } else {
+    map.setView([48.8566, 2.3522], 4)
+  }
+
+  window.setTimeout(() => map.invalidateSize(), 0)
+}
+
+async function openItineraryMap() {
+  itineraryMapVisible.value = true
+  itineraryMapError.value = ''
+  itineraryMapBoundaries.value = []
+
+  if (!canGenerateItineraryMap.value) {
+    itineraryMapPoints.value = []
+    itineraryMapError.value = props.texts.itineraryMapEmpty
+    return
+  }
+
+  itineraryMapLoading.value = true
+
+  try {
+    const [points, boundaries] = await Promise.all([
+      Promise.all(
+        itineraryRouteCities.value.map(async (city) => {
+          const coordinates = await resolveCityCoordinates(city, form.countries, currentLanguage.value)
+          return coordinates ? { name: city, ...coordinates } : null
+        })
+      ),
+      Promise.all(
+        form.countries.map(async (country) => {
+          const polygons = await getCountryBoundary(country)
+          return polygons ? { country, polygons } : null
+        })
+      )
+    ])
+
+    itineraryMapPoints.value = points.filter((point): point is ItineraryMapPoint => point !== null)
+    itineraryMapBoundaries.value = boundaries.filter((boundary): boundary is ItineraryMapBoundary => boundary !== null)
+    if (itineraryMapPoints.value.length < 2) {
+      itineraryMapError.value = props.texts.itineraryMapError
+      return
+    }
+  } catch {
+    itineraryMapPoints.value = []
+    itineraryMapError.value = props.texts.itineraryMapError
+  } finally {
+    itineraryMapLoading.value = false
+  }
+}
+
+watch([itineraryMapVisible, itineraryMapLoading, itineraryMapError, itineraryMapPoints], async ([visible, loading, error, points]) => {
+  if (!visible || loading || error || points.length < 2) return
+  await renderItineraryMap()
+})
+
+onBeforeUnmount(() => {
+  itineraryLeafletLayerGroup = null
+  itineraryLeafletMap?.remove()
+  itineraryLeafletMap = null
+})
 
 function hasOvernightTransport(dayIndex: number) {
   return form.dayActivities[dayIndex]?.some((activity) => activity.type === 'transport' && (activity.endDayOffset ?? 0) > 0) ?? false
@@ -3072,7 +3254,18 @@ watch(
         </div>
 
         <section v-if="itineraryDays.length" class="itinerary-section">
-          <h3>{{ props.texts.dailyProgram }}</h3>
+          <div class="itinerary-section-header">
+            <h3>{{ props.texts.dailyProgram }}</h3>
+            <Button
+              type="button"
+              outlined
+              icon="pi pi-map"
+              class="itinerary-map-btn"
+              :label="props.texts.generateItineraryMap"
+              :disabled="!canGenerateItineraryMap"
+              @click="openItineraryMap"
+            />
+          </div>
           <div v-for="item in itineraryDays" :key="item.index" class="itinerary-row">
             <div class="itinerary-header">
               <button
@@ -3358,6 +3551,32 @@ watch(
             </div>
           </div>
         </section>
+
+        <Dialog
+          v-model:visible="itineraryMapVisible"
+          modal
+          :header="props.texts.itineraryMap"
+          class="itinerary-map-dialog"
+        >
+          <div class="itinerary-map-dialog-body">
+            <div v-if="itineraryMapLoading" class="itinerary-map-state">
+              <ProgressSpinner style="width: 30px; height: 30px" stroke-width="6" />
+            </div>
+            <p v-else-if="itineraryMapError" class="itinerary-map-message">{{ itineraryMapError }}</p>
+            <div v-else class="itinerary-map-canvas">
+              <div ref="itineraryMapContainer" class="itinerary-map-leaflet" :aria-label="props.texts.itineraryMap" />
+              <div class="itinerary-map-route-list">
+                <span
+                  v-for="(point, pointIndex) in itineraryMapPoints"
+                  :key="`${point.name}-${pointIndex}`"
+                  class="itinerary-map-route-chip"
+                >
+                  {{ pointIndex + 1 }}. {{ point.name }}
+                </span>
+              </div>
+            </div>
+          </div>
+        </Dialog>
 
         <Button
           type="submit"

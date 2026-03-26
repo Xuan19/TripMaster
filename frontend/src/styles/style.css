@@ -667,6 +667,18 @@ body {
   font-size: 1rem;
 }
 
+.itinerary-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+}
+
+.itinerary-map-btn.p-button {
+  white-space: nowrap;
+}
+
 .itinerary-row {
   display: grid;
   gap: 0.65rem;
@@ -880,6 +892,75 @@ body {
   gap: 0.75rem;
   min-width: 0;
   width: 100%;
+}
+
+.itinerary-map-dialog {
+  width: min(92vw, 980px);
+}
+
+.itinerary-map-dialog-body {
+  display: grid;
+  gap: 1rem;
+}
+
+.itinerary-map-state,
+.itinerary-map-message {
+  min-height: 360px;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  text-align: center;
+  color: var(--tm-muted);
+}
+
+.itinerary-map-canvas {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.itinerary-map-leaflet {
+  height: min(62vh, 520px);
+  min-height: 360px;
+  border-radius: 22px;
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.itinerary-map-route-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.itinerary-map-route-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  background: #fff4e8;
+  color: #8f0f46;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.itinerary-map-marker {
+  display: grid;
+  place-items: center;
+}
+
+.itinerary-map-marker span {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: #8f0f46;
+  border: 2px solid rgba(255, 255, 255, 0.95);
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 700;
+  box-shadow: 0 8px 18px rgba(143, 15, 70, 0.28);
 }
 
 .accommodation-block {
