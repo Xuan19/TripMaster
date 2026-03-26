@@ -301,6 +301,10 @@ function getFormattedMoneyTooltip(value: number | null | undefined) {
   return value === null || value === undefined ? '' : formatMoney(Number(value))
 }
 
+function hasOvernightTransport(dayIndex: number) {
+  return form.dayActivities[dayIndex]?.some((activity) => activity.type === 'transport' && (activity.endDayOffset ?? 0) > 0) ?? false
+}
+
 watch(
   () => form.numberOfDays,
   (days) => {
@@ -1420,7 +1424,7 @@ function formatTimeZoneLabel(timeZone: string) {
   return parts[parts.length - 1]?.replace(/_/g, ' ') ?? timeZone
 }
 
-function buildLocalTimeNote(label: 'Start time' | 'End time', city: string, timeZone: string, dayOffset = 0) {
+function buildLocalTimeNote(city: string, dayOffset = 0) {
   const country = inferCountryForCity(city, form.countries[0])
   const suffix = dayOffset > 0 ? ` (+${dayOffset} day${dayOffset > 1 ? 's' : ''})` : ''
   return `${country} local time${suffix}.`
@@ -1477,8 +1481,8 @@ async function getArrivalTimeInfo(
     endTime,
     endDayOffset,
     arrivalLocalMinutes: endDayOffset * 24 * 60 + arrivalHours * 60 + arrivalMinutes,
-    startTimeNote: hasTimeZoneChange ? buildLocalTimeNote('Start time', fromCity, fromTimeZone) : '',
-    timeNote: hasTimeZoneChange ? buildLocalTimeNote('End time', toCity, toTimeZone, endDayOffset) : ''
+    startTimeNote: hasTimeZoneChange ? buildLocalTimeNote(fromCity) : '',
+    timeNote: hasTimeZoneChange ? buildLocalTimeNote(toCity, endDayOffset) : ''
   }
 }
 function formatApiTime(value: string | null | undefined) {
@@ -2058,6 +2062,9 @@ async function buildAutoAccommodations(dayStops: string[]) {
     dayStops.map(async (city, dayIndex) => {
       const normalizedCity = city.trim()
       if (!normalizedCity || form.hotelStars === null) return createEmptyAccommodation()
+      if (hasOvernightTransport(dayIndex)) {
+        return createEmptyAccommodation()
+      }
 
       const checkInDate = itineraryDays.value[dayIndex]?.isoDate
       const hotelPlan = getGeneratedHotelPlan(
@@ -2663,6 +2670,8 @@ function handleSubmit() {
         date: item.isoDate,
         cities: form.cityStops[item.index].map((city) => city.trim()).filter((city) => city.length > 0),
         accommodation: (() => {
+          if (hasOvernightTransport(item.index)) return undefined
+
           const accommodation = form.dayAccommodations[item.index] ?? createEmptyAccommodation()
           const normalized = {
             type: accommodation.type.trim(),
@@ -3213,7 +3222,7 @@ watch(
 	                :label="props.texts.addActivity"
 	                @click="addActivity(item.index)"
 	              />
-		              <div class="accommodation-block">
+		              <div v-if="!hasOvernightTransport(item.index)" class="accommodation-block">
 		                <div class="accommodation-row">
 		                  <div class="accommodation-input-field accommodation-type-field">
 		                    <small class="accommodation-type-label">

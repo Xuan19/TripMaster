@@ -1368,13 +1368,20 @@ body {
 }
 
 @media (min-width: 1041px) {
+  .layout-grid {
+    width: min(max(1130px, 100% - 16rem), 1280px);
+    margin-left: auto;
+    margin-right: auto;
+    padding-right: 2rem;
+  }
+
   .trip-form-shell {
-    grid-template-columns: minmax(0, 1fr) 220px;
+    grid-template-columns: minmax(0, 1fr) 240px;
   }
 
   .trip-summary-sidebar {
-    width: 220px;
-    min-width: 220px;
+    width: 240px;
+    min-width: 240px;
     align-self: stretch;
     margin-left: 1.25rem;
   }
@@ -1384,9 +1391,10 @@ body {
     top: 50%;
     right: 1.5rem;
     transform: translateY(-50%);
-    width: 220px;
+    width: 240px;
     max-width: calc(100vw - 2rem);
   }
+
 }
 
 @media (min-width: 1201px) {
@@ -1419,6 +1427,20 @@ body {
 
   .trip-form-main {
     min-width: 920px;
+  }
+}
+
+@media (min-width: 1680px) {
+  .page {
+    max-width: 1440px;
+  }
+
+  .layout-grid {
+    width: min(1660px, 100%);
+  }
+
+  .trip-form-main {
+    min-width: 1120px;
   }
 }
 
@@ -1533,7 +1555,6 @@ body,
   display: grid;
   grid-template-columns: 1fr;
   gap: var(--layout-gap);
-  width: min(1420px, 100%);
   margin: 0 auto;
   padding: 0.75rem;
   justify-content: center;
@@ -1667,6 +1688,21 @@ body,
     position: sticky;
     top: 5.8rem;
     padding: 0.55rem;
+  }
+}
+
+@media (min-width: 1041px) and (max-width: 1500px) {
+  .layout-grid {
+    grid-template-columns: minmax(190px, 250px) 1140px;
+    padding: clamp(0.9rem, 2vw, 1.4rem);
+  }
+
+}
+
+@media (min-width: 1500px) {
+
+  .layout-grid {
+    grid-template-columns: minmax(250px, 300px) 1250px;
   }
 }
 
