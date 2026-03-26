@@ -382,6 +382,13 @@ function ensureItineraryMap() {
   return itineraryLeafletMap
 }
 
+function destroyItineraryMap() {
+  itineraryLeafletLayerGroup = null
+  itineraryLeafletTileLayer = null
+  itineraryLeafletMap?.remove()
+  itineraryLeafletMap = null
+}
+
 async function renderItineraryMap() {
   await nextTick()
 
@@ -492,15 +499,17 @@ async function openItineraryMap() {
 }
 
 watch([itineraryMapVisible, itineraryMapLoading, itineraryMapError, itineraryMapPoints], async ([visible, loading, error, points]) => {
-  if (!visible || loading || error || points.length < 2) return
+  if (!visible) {
+    destroyItineraryMap()
+    return
+  }
+
+  if (loading || error || points.length < 2) return
   await renderItineraryMap()
 })
 
 onBeforeUnmount(() => {
-  itineraryLeafletLayerGroup = null
-  itineraryLeafletTileLayer = null
-  itineraryLeafletMap?.remove()
-  itineraryLeafletMap = null
+  destroyItineraryMap()
 })
 
 function hasOvernightTransport(dayIndex: number) {
