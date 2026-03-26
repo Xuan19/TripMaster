@@ -3,6 +3,7 @@ import type { Language } from '../../locales/i18n'
 
 interface RestCountry {
   cca2?: string
+  cca3?: string
   name?: {
     common?: string
   }
@@ -133,7 +134,7 @@ async function getCountriesMetadata(): Promise<RestCountry[]> {
   if (pendingCountriesRequest) return pendingCountriesRequest
 
   pendingCountriesRequest = axios
-    .get<RestCountry[]>('https://restcountries.com/v3.1/all?fields=name,cca2')
+    .get<RestCountry[]>('https://restcountries.com/v3.1/all?fields=name,cca2,cca3')
     .then((response) => {
       countriesCache = response.data ?? []
       return countriesCache
@@ -209,7 +210,7 @@ export async function getCountryBoundary(country: string): Promise<CountryBounda
   const request = (async () => {
     const countries = await getCountriesMetadata()
     const match = countries.find((item) => normalizeCountryName(item.name?.common ?? '') === normalizedCountry)
-    const code = match?.cca2?.trim().toUpperCase()
+    const code = match?.cca3?.trim().toUpperCase()
 
     if (!code) {
       boundaryCache.set(normalizedCountry, null)

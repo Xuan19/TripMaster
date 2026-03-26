@@ -154,6 +154,7 @@ const autoFillingCities = ref(false)
 const activityLoadingByDay = ref<Record<number, boolean>>({})
 const itineraryMapVisible = ref(false)
 const itineraryMapLoading = ref(false)
+const itineraryMapTileLoading = ref(false)
 const itineraryMapError = ref('')
 const itineraryMapPoints = ref<ItineraryMapPoint[]>([])
 const itineraryMapBoundaries = ref<ItineraryMapBoundary[]>([])
@@ -161,6 +162,7 @@ const itineraryMapContainer = ref<HTMLElement | null>(null)
 const skipCountryReset = ref(false)
 let itineraryLeafletMap: L.Map | null = null
 let itineraryLeafletLayerGroup: L.LayerGroup | null = null
+let itineraryLeafletTileLayer: L.TileLayer | null = null
 let distanceDebounceTimer: ReturnType<typeof setTimeout> | null = null
 let cityLoaderTimer: ReturnType<typeof setTimeout> | null = null
 const formCurrencyCode = ref<Currency>(props.currencyCode)
@@ -358,9 +360,21 @@ function ensureItineraryMap() {
       scrollWheelZoom: true
     })
 
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    itineraryLeafletTileLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(itineraryLeafletMap)
+    })
+
+    itineraryLeafletTileLayer.on('loading', () => {
+      itineraryMapTileLoading.value = true
+    })
+    itineraryLeafletTileLayer.on('load', () => {
+      itineraryMapTileLoading.value = false
+    })
+    itineraryLeafletTileLayer.on('tileerror', () => {
+      itineraryMapTileLoading.value = false
+    })
+
+    itineraryLeafletTileLayer.addTo(itineraryLeafletMap)
 
     itineraryLeafletLayerGroup = L.layerGroup().addTo(itineraryLeafletMap)
   }
@@ -424,8 +438,10 @@ async function renderItineraryMap() {
   })
 
   if (bounds.isValid()) {
+    itineraryMapTileLoading.value = true
     map.fitBounds(bounds.pad(0.18))
   } else {
+    itineraryMapTileLoading.value = true
     map.setView([48.8566, 2.3522], 4)
   }
 
@@ -482,6 +498,7 @@ watch([itineraryMapVisible, itineraryMapLoading, itineraryMapError, itineraryMap
 
 onBeforeUnmount(() => {
   itineraryLeafletLayerGroup = null
+  itineraryLeafletTileLayer = null
   itineraryLeafletMap?.remove()
   itineraryLeafletMap = null
 })
@@ -3565,7 +3582,12 @@ watch(
             </div>
             <p v-else-if="itineraryMapError" class="itinerary-map-message">{{ itineraryMapError }}</p>
             <div v-else class="itinerary-map-canvas">
-              <div ref="itineraryMapContainer" class="itinerary-map-leaflet" :aria-label="props.texts.itineraryMap" />
+              <div class="itinerary-map-frame">
+                <div ref="itineraryMapContainer" class="itinerary-map-leaflet" :aria-label="props.texts.itineraryMap" />
+                <div v-if="itineraryMapTileLoading" class="itinerary-map-overlay">
+                  <ProgressSpinner style="width: 30px; height: 30px" stroke-width="6" />
+                </div>
+              </div>
               <div class="itinerary-map-route-list">
                 <span
                   v-for="(point, pointIndex) in itineraryMapPoints"
