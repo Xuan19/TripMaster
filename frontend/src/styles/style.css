@@ -1428,6 +1428,10 @@ body {
   .trip-form-main {
     min-width: 920px;
   }
+
+   .layout-grid {
+    width: min(1660px, 100%);
+  }
 }
 
 @media (min-width: 1680px) {
@@ -1436,7 +1440,7 @@ body {
   }
 
   .layout-grid {
-    width: min(1660px, 100%);
+    width: min(1860px, 100%);
   }
 
   .trip-form-main {
@@ -1688,21 +1692,6 @@ body,
     position: sticky;
     top: 5.8rem;
     padding: 0.55rem;
-  }
-}
-
-@media (min-width: 1041px) and (max-width: 1500px) {
-  .layout-grid {
-    grid-template-columns: minmax(190px, 250px) 1140px;
-    padding: clamp(0.9rem, 2vw, 1.4rem);
-  }
-
-}
-
-@media (min-width: 1500px) {
-
-  .layout-grid {
-    grid-template-columns: minmax(250px, 300px) 1250px;
   }
 }
 
