@@ -280,6 +280,23 @@ function getTooltipText(value: string | number | null | undefined) {
   return String(value).trim()
 }
 
+function timeStringToDate(value: string | null | undefined) {
+  if (!value) return null
+
+  const [hours, minutes] = value.split(':').map(Number)
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null
+
+  const date = new Date()
+  date.setHours(hours, minutes, 0, 0)
+  return date
+}
+
+function dateValueToTimeString(value: Date | Date[] | string | null | undefined) {
+  const date = value instanceof Date ? value : Array.isArray(value) ? value[0] : null
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return ''
+  return `${`${date.getHours()}`.padStart(2, '0')}:${`${date.getMinutes()}`.padStart(2, '0')}`
+}
+
 function getFormattedMoneyTooltip(value: number | null | undefined) {
   return value === null || value === undefined ? '' : formatMoney(Number(value))
 }
@@ -1425,6 +1442,7 @@ async function getArrivalTimeInfo(
     return {
       endTime: minutesToTime(departureMinutes + durationMinutes),
       endDayOffset: Math.floor((departureMinutes + durationMinutes) / (24 * 60)),
+      arrivalLocalMinutes: departureMinutes + durationMinutes,
       startTimeNote: '',
       timeNote: ''
     }
@@ -1458,6 +1476,7 @@ async function getArrivalTimeInfo(
   return {
     endTime,
     endDayOffset,
+    arrivalLocalMinutes: endDayOffset * 24 * 60 + arrivalHours * 60 + arrivalMinutes,
     startTimeNote: hasTimeZoneChange ? buildLocalTimeNote('Start time', fromCity, fromTimeZone) : '',
     timeNote: hasTimeZoneChange ? buildLocalTimeNote('End time', toCity, toTimeZone, endDayOffset) : ''
   }
@@ -1831,6 +1850,7 @@ async function buildAutoActivities(dayStops: string[][]) {
         let estimatedTime = true
         let hasRealTransportPrice = false
         let endDayOffset = 0
+        let arrivalLocalMinutes = transportEndMinutes
         let startTimeNote = ''
         let timeNote = ''
         let transportCost = estimateTransportCost(
@@ -1945,6 +1965,7 @@ async function buildAutoActivities(dayStops: string[][]) {
           )
           displayedEndTime = arrivalInfo.endTime
           endDayOffset = arrivalInfo.endDayOffset
+          arrivalLocalMinutes = arrivalInfo.arrivalLocalMinutes
           startTimeNote = arrivalInfo.startTimeNote
           timeNote = arrivalInfo.timeNote
         }
@@ -1973,7 +1994,7 @@ async function buildAutoActivities(dayStops: string[][]) {
             reachedCities.push(nextCity)
           }
         }
-        currentMinutes = Math.min(dayEndMinutes, Math.max(transportStartMinutes, transportEndMinutes) + 30)
+        currentMinutes = Math.min(dayEndMinutes, Math.max(transportStartMinutes, arrivalLocalMinutes) + 30)
         maybeAddPendingMeals(nextCity)
         maybeAddAfternoonVisit(nextCity)
       }
@@ -2226,6 +2247,10 @@ function handleAccommodationCheckInChange(dayIndex: number, value: string) {
   ensureDayAccommodation(dayIndex).checkInTime = value || ''
 }
 
+function handleAccommodationCheckInCalendarChange(dayIndex: number, value: Date | Date[] | string | null | undefined) {
+  handleAccommodationCheckInChange(dayIndex, dateValueToTimeString(value))
+}
+
 function handleAccommodationTypeChange(dayIndex: number, value: string) {
   const accommodation = ensureDayAccommodation(dayIndex)
   accommodation.type = value || ''
@@ -2381,6 +2406,14 @@ function handleActivityStartChange(dayIndex: number, activityIndex: number, valu
   syncActivitiesFrom(dayIndex, activityIndex + 1)
 }
 
+function handleActivityStartCalendarChange(
+  dayIndex: number,
+  activityIndex: number,
+  value: Date | Date[] | string | null | undefined
+) {
+  handleActivityStartChange(dayIndex, activityIndex, dateValueToTimeString(value))
+}
+
 function handleActivityEndChange(dayIndex: number, activityIndex: number, value: string) {
   const activity = form.dayActivities[dayIndex]?.[activityIndex]
   if (!activity) return
@@ -2398,6 +2431,14 @@ function handleActivityEndChange(dayIndex: number, activityIndex: number, value:
   activity.endTime = value < activity.startTime ? activity.startTime : value
   activity.endDayOffset = 0
   syncActivitiesFrom(dayIndex, activityIndex + 1)
+}
+
+function handleActivityEndCalendarChange(
+  dayIndex: number,
+  activityIndex: number,
+  value: Date | Date[] | string | null | undefined
+) {
+  handleActivityEndChange(dayIndex, activityIndex, dateValueToTimeString(value))
 }
 
 function isValidTimeRange(dayIndex: number, activityIndex: number, activity: DayActivity) {
@@ -3082,12 +3123,15 @@ watch(
                     <span>{{ props.texts.activityStartTime }}</span>
                   </small>
                   <div class="value-tooltip-host" :data-tooltip="getTooltipText(activity.startTime)">
-                    <InputText
-                      :model-value="activity.startTime"
-                      type="time"
-                      :min="getMinStartTime(item.index, activityIndex)"
+                    <Calendar
+                      :model-value="timeStringToDate(activity.startTime)"
+                      time-only
+                      hour-format="24"
+                      show-icon
+                      icon-display="input"
+                      :min-date="timeStringToDate(getMinStartTime(item.index, activityIndex))"
                       :placeholder="props.texts.activityStartTime"
-                      @update:model-value="handleActivityStartChange(item.index, activityIndex, String($event ?? ''))"
+                      @update:model-value="handleActivityStartCalendarChange(item.index, activityIndex, $event)"
                     />
                   </div>
                 </div>
@@ -3101,12 +3145,15 @@ watch(
                     />
                   </small>
                   <div class="value-tooltip-host" :data-tooltip="getTooltipText(activity.endTime)">
-                    <InputText
-                      :model-value="activity.endTime"
-                      type="time"
-                      :min="activity.startTime || getMinStartTime(item.index, activityIndex)"
+                    <Calendar
+                      :model-value="timeStringToDate(activity.endTime)"
+                      time-only
+                      hour-format="24"
+                      show-icon
+                      icon-display="input"
+                      :min-date="timeStringToDate(activity.startTime || getMinStartTime(item.index, activityIndex))"
                       :placeholder="props.texts.activityEndTime"
-                      @update:model-value="handleActivityEndChange(item.index, activityIndex, String($event ?? ''))"
+                      @update:model-value="handleActivityEndCalendarChange(item.index, activityIndex, $event)"
                     />
                   </div>
                 </div>
@@ -3183,17 +3230,20 @@ watch(
 		                      @update:model-value="handleAccommodationTypeChange(item.index, String($event ?? ''))"
 		                    />
 		                  </div>
-		                  <div class="accommodation-checkin-field">
-		                    <small>{{ props.texts.accommodationCheckIn }}</small>
+                  <div class="accommodation-checkin-field">
+                    <small>{{ props.texts.accommodationCheckIn }}</small>
                         <div class="value-tooltip-host" :data-tooltip="getTooltipText(getAccommodationCheckInValue(item.index))">
-		                      <InputText
-		                        :model-value="getAccommodationCheckInValue(item.index)"
-		                        type="time"
-		                        :placeholder="props.texts.accommodationCheckIn"
-		                        @update:model-value="handleAccommodationCheckInChange(item.index, String($event ?? ''))"
-		                      />
+                      <Calendar
+                        :model-value="timeStringToDate(getAccommodationCheckInValue(item.index))"
+                        time-only
+                        hour-format="24"
+                        show-icon
+                        icon-display="input"
+                        :placeholder="props.texts.accommodationCheckIn"
+                        @update:model-value="handleAccommodationCheckInCalendarChange(item.index, $event)"
+                      />
                         </div>
-		                  </div>
+                  </div>
 		                  <div class="accommodation-input-field">
 		                    <small aria-hidden="true">&nbsp;</small>
                         <div class="value-tooltip-host" :data-tooltip="getTooltipText(ensureDayAccommodation(item.index).name)">
@@ -3368,6 +3418,7 @@ watch(
 .value-tooltip-host :deep(.p-inputtext),
 .value-tooltip-host :deep(.p-inputnumber),
 .value-tooltip-host :deep(.p-autocomplete),
+.value-tooltip-host :deep(.p-calendar),
 .value-tooltip-host :deep(.p-dropdown),
 .value-tooltip-host :deep(.p-multiselect) {
   width: 100%;
