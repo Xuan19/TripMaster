@@ -672,11 +672,27 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 0.9rem;
-  flex-wrap: wrap;
 }
 
 .itinerary-map-btn.p-button {
-  white-space: nowrap;
+  margin-left: auto;
+  width: 2.2rem;
+  min-width: 2.2rem;
+  height: 2.2rem;
+  padding: 0;
+  border: none;
+  box-shadow: none;
+  color: var(--tm-accent-strong);
+  background: transparent;
+}
+
+.itinerary-map-btn.p-button:enabled:hover {
+  color: #8f0f46;
+  background: rgba(255, 241, 247, 0.9);
+}
+
+.itinerary-map-btn.p-button:enabled:focus-visible {
+  box-shadow: 0 0 0 0.16rem rgba(219, 39, 119, 0.18);
 }
 
 .itinerary-row {

@@ -3257,11 +3257,12 @@ watch(
           <div class="itinerary-section-header">
             <h3>{{ props.texts.dailyProgram }}</h3>
             <Button
+              v-tooltip.left="props.texts.generateItineraryMap"
               type="button"
-              outlined
               icon="pi pi-map"
+              text
+              rounded
               class="itinerary-map-btn"
-              :label="props.texts.generateItineraryMap"
               :disabled="!canGenerateItineraryMap"
               @click="openItineraryMap"
             />
