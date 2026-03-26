@@ -38,11 +38,12 @@ import {
   getCitiesByCountry,
   getDistanceBetweenCities,
   localizeCityName,
+  resolveCityCountry,
   resolveCityTimeZone,
   searchCitiesWorldwide
 } from '../../services/api/geodataApi'
 import { getTrainJourney } from '../../services/api/transportApi'
-import { convertAmount, isCurrency } from '../../utils/currency'
+import { convertAmount, getCurrencyDisplay, isCurrency } from '../../utils/currency'
 
 interface DayActivity {
   startTime: string
@@ -87,6 +88,8 @@ const DEFAULT_AUTO_ACTIVITY_START_TIME = '09:00'
 const DEFAULT_HOTEL_CHECK_IN_TIME = '15:00'
 const LATEST_AUTO_ACTIVITY_START_TIME = '20:30'
 const DEFAULT_DAY_END_TIME = '23:30'
+const FLIGHT_PREP_BUFFER_MINUTES = 120
+const TRAIN_PREP_BUFFER_MINUTES = 60
 const LUNCH_WINDOW_START_TIME = '12:00'
 const LUNCH_WINDOW_LATEST_TIME = '15:00'
 const DINNER_WINDOW_START_TIME = '19:00'
@@ -1424,8 +1427,7 @@ function formatTimeZoneLabel(timeZone: string) {
   return parts[parts.length - 1]?.replace(/_/g, ' ') ?? timeZone
 }
 
-function buildLocalTimeNote(city: string, dayOffset = 0) {
-  const country = inferCountryForCity(city, form.countries[0])
+function buildLocalTimeNote(country: string, dayOffset = 0) {
   const suffix = dayOffset > 0 ? ` (+${dayOffset} day${dayOffset > 1 ? 's' : ''})` : ''
   return `${country} local time${suffix}.`
 }
@@ -1437,9 +1439,11 @@ async function getArrivalTimeInfo(
   departureMinutes: number,
   durationMinutes: number
 ) {
-  const [fromTimeZone, toTimeZone] = await Promise.all([
+  const [fromTimeZone, toTimeZone, fromCountry, toCountry] = await Promise.all([
     resolveCityTimeZone(fromCity, form.countries, currentLanguage.value),
-    resolveCityTimeZone(toCity, form.countries, currentLanguage.value)
+    resolveCityTimeZone(toCity, form.countries, currentLanguage.value),
+    resolveCityCountry(fromCity, form.countries, currentLanguage.value),
+    resolveCityCountry(toCity, form.countries, currentLanguage.value)
   ])
 
   if (!fromTimeZone || !toTimeZone) {
@@ -1481,8 +1485,8 @@ async function getArrivalTimeInfo(
     endTime,
     endDayOffset,
     arrivalLocalMinutes: endDayOffset * 24 * 60 + arrivalHours * 60 + arrivalMinutes,
-    startTimeNote: hasTimeZoneChange ? buildLocalTimeNote(fromCity) : '',
-    timeNote: hasTimeZoneChange ? buildLocalTimeNote(toCity, endDayOffset) : ''
+    startTimeNote: hasTimeZoneChange ? buildLocalTimeNote(fromCountry ?? inferCountryForCity(fromCity, form.countries[0])) : '',
+    timeNote: hasTimeZoneChange ? buildLocalTimeNote(toCountry ?? inferCountryForCity(toCity, form.countries[0]), endDayOffset) : ''
   }
 }
 function formatApiTime(value: string | null | undefined) {
@@ -1490,6 +1494,10 @@ function formatApiTime(value: string | null | undefined) {
   const parsed = new Date(value)
   if (Number.isNaN(parsed.getTime())) return null
   return `${`${parsed.getHours()}`.padStart(2, '0')}:${`${parsed.getMinutes()}`.padStart(2, '0')}`
+}
+
+function getVisitCountForActivities(activities: DayActivity[]) {
+  return activities.filter((activity) => activity.type === 'visit').length
 }
 
 function addGeneratedActivity(
@@ -1757,6 +1765,43 @@ async function buildAutoActivities(dayStops: string[][]) {
       currentMinutes = Math.min(dayEndMinutes, currentMinutes + 30)
     }
 
+    const addExtraVisitIfNeeded = (city: string, latestStartMinutes = timeToMinutes(LATEST_AUTO_ACTIVITY_START_TIME)) => {
+      if (getVisitCountForActivities(activities) >= 2) return
+      if (currentMinutes >= latestStartMinutes) return
+
+      const visitIndex = visitCountsByCity[city] ?? 0
+      const visitDurationMinutes = Math.min(90, getGeneratedVisitDurationMinutes(city, visitIndex))
+      const extraVisitStartMinutes = Math.max(currentMinutes, timeToMinutes('15:30'))
+
+      if (extraVisitStartMinutes >= latestStartMinutes) return
+
+      currentMinutes = addGeneratedActivity(
+        activities,
+        extraVisitStartMinutes,
+        visitDurationMinutes,
+        'visit',
+        formatVisitName(city, visitIndex)
+      )
+      activities[activities.length - 1].cost = getGeneratedVisitCost(
+        city,
+        visitIndex,
+        itineraryDays.value[dayIndex]?.isoDate,
+        getOccupancyInputs(),
+        props.currencyCode
+      )
+      activities[activities.length - 1].costDetails = getGeneratedVisitCostDetails(
+        city,
+        visitIndex,
+        itineraryDays.value[dayIndex]?.isoDate,
+        formatMoney,
+        getOccupancyInputs(),
+        props.currencyCode
+      )
+      activities[activities.length - 1].estimatedCost = true
+      visitCountsByCity[city] = visitIndex + getGeneratedVisitSiteCount(city, visitIndex)
+      currentMinutes = Math.min(dayEndMinutes, currentMinutes + 30)
+    }
+
     for (let cityIndex = 0; cityIndex < cities.length; cityIndex += 1) {
       const city = cities[cityIndex]
       maybeAddPendingMeals(city)
@@ -1845,11 +1890,14 @@ async function buildAutoActivities(dayStops: string[][]) {
             city,
             nextCity,
             distance,
-            currentMinutes,
+            currentMinutes + FLIGHT_PREP_BUFFER_MINUTES - 45,
             itineraryDays.value[dayIndex]?.isoDate
           )
           transportStartMinutes = flightSchedule.departureMinutes
           transportEndMinutes = transportStartMinutes + flightSchedule.durationMinutes
+        } else if (transportMode === 'train') {
+          transportStartMinutes = Math.max(transportStartMinutes, currentMinutes + TRAIN_PREP_BUFFER_MINUTES)
+          transportEndMinutes = Math.max(transportStartMinutes, transportEndMinutes)
         }
         let estimatedTime = true
         let hasRealTransportPrice = false
@@ -2012,12 +2060,16 @@ async function buildAutoActivities(dayStops: string[][]) {
 
     if (!dinnerAdded && currentMinutes <= dinnerWindowLatestMinutes) {
       maybeAddAfternoonVisit(cities[cities.length - 1])
+      addExtraVisitIfNeeded(cities[cities.length - 1], dinnerWindowStartMinutes - 90)
       const mealCity = cities[cities.length - 1]
       addMealInWindow(mealCity, dinnerWindowStartMinutes, dinnerWindowLatestMinutes)
       dinnerAdded = true
     }
 
     const finalCity = primaryVisitCity || cities[cities.length - 1]
+    if (!activities.some((activity) => activity.type === 'transport')) {
+      addExtraVisitIfNeeded(finalCity)
+    }
     const shouldAddExtraVisit = cities.length === 1 || isTouristHub(finalCity)
     if (shouldAddExtraVisit && activities.length < 5 && currentMinutes < timeToMinutes(LATEST_AUTO_ACTIVITY_START_TIME)) {
       const visitIndex = visitCountsByCity[finalCity] ?? 0
@@ -2584,6 +2636,10 @@ function shouldShowCityConnector(dayIndex: number, segmentIndex: number) {
   return !dayStops.slice(segmentIndex + 1).some((city) => city.trim().length > 0)
 }
 
+function hasNextCity(dayIndex: number, segmentIndex: number) {
+  return Boolean(form.cityStops[dayIndex]?.[segmentIndex + 1]?.trim())
+}
+
 function getTransportIcon(dayIndex: number, segmentIndex: number) {
   const key = getSegmentKey(dayIndex, segmentIndex)
   if (segmentLoading[key]) return 'pi pi-spin pi-spinner'
@@ -2700,7 +2756,8 @@ function handleSubmit() {
 function formatMoney(value: number) {
   return new Intl.NumberFormat(undefined, {
     style: 'currency',
-    currency: props.currencyCode
+    currency: props.currencyCode,
+    currencyDisplay: getCurrencyDisplay(props.currencyCode)
   }).format(value)
 }
 
@@ -2803,13 +2860,14 @@ watch(
           <div class="field-group compact-field">
             <label>{{ props.texts.budget }}</label>
             <div class="value-tooltip-host" :data-tooltip="getFormattedMoneyTooltip(form.budget)">
-              <InputNumber
-                v-model="form.budget"
-                mode="currency"
-                :currency="props.currencyCode"
-                :min="0"
-                :placeholder="`${props.texts.budget} (${props.currencyCode})`"
-              />
+                    <InputNumber
+                      v-model="form.budget"
+                      mode="currency"
+                      :currency="props.currencyCode"
+                      :currency-display="getCurrencyDisplay(props.currencyCode)"
+                      :min="0"
+                      :placeholder="`${props.texts.budget} (${props.currencyCode})`"
+                    />
             </div>
           </div>
         </div>
@@ -3076,6 +3134,11 @@ watch(
                   >
                     <span v-tooltip.bottom="getDistanceLabel(item.index, cityIndex)" class="distance-label">{{ getDistanceLabel(item.index, cityIndex) }}</span>
                     <span v-tooltip.bottom="getDistanceLabel(item.index, cityIndex)" class="arrow-line" />
+                    <i
+                      v-if="hasNextCity(item.index, cityIndex)"
+                      :class="['transport-icon', getTransportIcon(item.index, cityIndex)]"
+                      aria-hidden="true"
+                    />
                   </div>
                 </template>
 
@@ -3191,6 +3254,7 @@ watch(
                       v-model="activity.cost"
                       mode="currency"
                       :currency="props.currencyCode"
+                      :currency-display="getCurrencyDisplay(props.currencyCode)"
                       :min="0"
                       :placeholder="props.texts.activityCost"
                     />
@@ -3267,13 +3331,14 @@ watch(
 		                    <small aria-hidden="true">&nbsp;</small>
                         <div class="activity-cost-field">
                           <div class="value-tooltip-host" :data-tooltip="getFormattedMoneyTooltip(ensureDayAccommodation(item.index).cost)">
-		                      <InputNumber
-		                        :model-value="ensureDayAccommodation(item.index).cost"
-		                        mode="currency"
-		                        :currency="props.currencyCode"
-		                        :min="0"
-		                        :placeholder="props.texts.activityCost"
-		                        @update:model-value="handleAccommodationCostChange(item.index, $event as number | null)"
+			                      <InputNumber
+			                        :model-value="ensureDayAccommodation(item.index).cost"
+			                        mode="currency"
+			                        :currency="props.currencyCode"
+			                        :currency-display="getCurrencyDisplay(props.currencyCode)"
+			                        :min="0"
+			                        :placeholder="props.texts.activityCost"
+			                        @update:model-value="handleAccommodationCostChange(item.index, $event as number | null)"
 		                      />
                           </div>
                         <button

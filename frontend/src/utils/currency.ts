@@ -88,6 +88,17 @@ export function convertAmount(amount: number, from: Currency, to: Currency) {
   return Math.round(amountInEuro * ratesPerEuro[to] * 100) / 100
 }
 
+export function getCurrencyDisplay(currency: Currency) {
+  switch (currency) {
+    case 'EUR':
+    case 'USD':
+    case 'CNY':
+      return 'narrowSymbol' as const
+    default:
+      return 'symbol' as const
+  }
+}
+
 export function isCurrency(value: string | null | undefined): value is Currency {
   return value === 'EUR' || value === 'USD' || value === 'CNY'
 }

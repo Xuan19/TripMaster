@@ -59,6 +59,7 @@ interface EnRouteStopSuggestion {
 }
 
 export const fallbackCountryOptions = [
+  'Switzerland',
   'China',
   'France',
   'Japan',
@@ -67,8 +68,22 @@ export const fallbackCountryOptions = [
   'Italy',
   'Spain',
   'Germany',
+  'Netherlands',
+  'Belgium',
+  'Austria',
+  'Portugal',
+  'Ireland',
+  'Czechia',
+  'Greece',
+  'Turkey',
   'Canada',
-  'Australia'
+  'Australia',
+  'South Korea',
+  'Thailand',
+  'Singapore',
+  'United Arab Emirates',
+  'Mexico',
+  'Brazil'
 ]
 
 function normalizeOccupancy(occupancy?: OccupancyInputs) {
@@ -94,6 +109,7 @@ function getPassengerUnits(occupancy?: OccupancyInputs) {
 }
 
 export const fallbackCitiesByCountry: Record<string, string[]> = {
+  Switzerland: ['Zurich', 'Geneva', 'Lucerne', 'Interlaken', 'Bern', 'Lausanne'],
   China: ['Beijing', 'Shanghai', 'Shenzhen', 'Guangzhou'],
   France: ['Paris', 'Lyon', 'Marseille', 'Nice'],
   Japan: ['Tokyo', 'Osaka', 'Kyoto', 'Yokohama'],
@@ -102,8 +118,22 @@ export const fallbackCitiesByCountry: Record<string, string[]> = {
   Italy: ['Rome', 'Milan', 'Venice', 'Florence'],
   Spain: ['Madrid', 'Barcelona', 'Valencia', 'Seville'],
   Germany: ['Berlin', 'Munich', 'Frankfurt', 'Hamburg'],
+  Netherlands: ['Amsterdam', 'Rotterdam', 'The Hague', 'Utrecht'],
+  Belgium: ['Brussels', 'Bruges', 'Ghent', 'Antwerp'],
+  Austria: ['Vienna', 'Salzburg', 'Innsbruck', 'Graz'],
+  Portugal: ['Lisbon', 'Porto', 'Sintra', 'Faro'],
+  Ireland: ['Dublin', 'Galway', 'Cork', 'Killarney'],
+  Czechia: ['Prague', 'Brno', 'Cesky Krumlov', 'Karlovy Vary'],
+  Greece: ['Athens', 'Thessaloniki', 'Santorini', 'Heraklion'],
+  Turkey: ['Istanbul', 'Ankara', 'Izmir', 'Antalya'],
   Canada: ['Toronto', 'Montreal', 'Vancouver', 'Calgary'],
-  Australia: ['Sydney', 'Melbourne', 'Brisbane', 'Perth']
+  Australia: ['Sydney', 'Melbourne', 'Brisbane', 'Perth'],
+  'South Korea': ['Seoul', 'Busan', 'Incheon', 'Jeju City'],
+  Thailand: ['Bangkok', 'Chiang Mai', 'Phuket', 'Krabi'],
+  Singapore: ['Singapore'],
+  'United Arab Emirates': ['Dubai', 'Abu Dhabi', 'Sharjah'],
+  Mexico: ['Mexico City', 'Guadalajara', 'Merida', 'Cancun'],
+  Brazil: ['Rio de Janeiro', 'Sao Paulo', 'Salvador', 'Florianopolis']
 }
 
 const cityCountryByName = Object.fromEntries(
@@ -340,10 +370,10 @@ const enRouteStopByRoute: Record<string, EnRouteStopSuggestion> = {
 }
 
 const cityMealsByName: Record<string, MealOption[]> = {
-  beijing: [{ dish: 'Jiaozi', averageCost: 10 }, { dish: 'Zhajiangmian', averageCost: 9 }],
-  shanghai: [{ dish: 'Xiaolongbao', averageCost: 11 }, { dish: 'Shengjianbao', averageCost: 10 }],
-  shenzhen: [{ dish: 'Dim sum', averageCost: 12 }, { dish: 'Seafood congee', averageCost: 10 }],
-  guangzhou: [{ dish: 'Dim sum', averageCost: 11 }, { dish: 'Wonton noodles', averageCost: 9 }],
+  beijing: [{ dish: 'Jiaozi', averageCost: 6 }, { dish: 'Zhajiangmian', averageCost: 5.5 }],
+  shanghai: [{ dish: 'Xiaolongbao', averageCost: 7 }, { dish: 'Shengjianbao', averageCost: 6 }],
+  shenzhen: [{ dish: 'Dim sum', averageCost: 7.5 }, { dish: 'Seafood congee', averageCost: 6 }],
+  guangzhou: [{ dish: 'Dim sum', averageCost: 7 }, { dish: 'Wonton noodles', averageCost: 5.5 }],
   paris: [{ dish: 'Croque-monsieur', averageCost: 14 }, { dish: 'French onion soup', averageCost: 13 }],
   lyon: [{ dish: 'Quenelles', averageCost: 16 }, { dish: 'Salade lyonnaise', averageCost: 14 }],
   marseille: [{ dish: 'Bouillabaisse', averageCost: 24 }, { dish: 'Panisse', averageCost: 10 }],
@@ -383,7 +413,7 @@ const cityMealsByName: Record<string, MealOption[]> = {
 }
 
 const countryMealsByName: Record<string, MealOption[]> = {
-  China: [{ dish: 'Mapo tofu', averageCost: 9 }, { dish: 'Hot pot', averageCost: 16 }, { dish: 'Biangbiang noodles', averageCost: 10 }],
+  China: [{ dish: 'Mapo tofu', averageCost: 6 }, { dish: 'Hot pot', averageCost: 11 }, { dish: 'Biangbiang noodles', averageCost: 5.5 }],
   France: [{ dish: 'Crepe complete', averageCost: 11 }, { dish: 'Boeuf bourguignon', averageCost: 19 }, { dish: 'Quiche Lorraine', averageCost: 10 }],
   Japan: [{ dish: 'Udon', averageCost: 9 }, { dish: 'Katsu curry', averageCost: 12 }, { dish: 'Tempura don', averageCost: 13 }],
   'United States': [{ dish: 'Cheeseburger', averageCost: 13 }, { dish: 'BBQ plate', averageCost: 18 }, { dish: 'Mac and cheese', averageCost: 10 }],
@@ -620,7 +650,7 @@ const attractionPriceByName: Record<string, number> = {
 
 const visitSiteMetadataByName: Record<string, VisitSiteMetadata> = {
   'Forbidden City': { durationMinutes: 210, areaGroup: 'beijing-central' },
-  'Temple of Heaven': { durationMinutes: 120, areaGroup: 'beijing-central' },
+  'Temple of Heaven': { durationMinutes: 120, areaGroup: 'beijing-south' },
   'Summer Palace': { durationMinutes: 180, areaGroup: 'beijing-west' },
   'Mutianyu Great Wall': { durationMinutes: 240, areaGroup: 'beijing-outskirts' },
   'Tiananmen Square': { durationMinutes: 45, areaGroup: 'beijing-central' },
@@ -1055,11 +1085,32 @@ function getCityVisitPool(city: string) {
   const normalizedCity = city.trim().toLowerCase()
   const highlights = cityHighlightsByName[normalizedCity] ?? []
   const nearbyDayTrips = cityNearbyDayTripsByName[normalizedCity] ?? []
-  if (nearbyDayTrips.length === 0) return highlights
+  const groupedHighlights = groupHighlightsByArea(highlights)
+  if (nearbyDayTrips.length === 0) return groupedHighlights
 
-  const coreBeforeDayTrip = highlights.slice(0, 4)
-  const remainingHighlights = highlights.slice(4)
-  return [...coreBeforeDayTrip, nearbyDayTrips[0], ...remainingHighlights, ...nearbyDayTrips.slice(1)]
+  return [...groupedHighlights, ...nearbyDayTrips]
+}
+
+function groupHighlightsByArea(highlights: string[]) {
+  const grouped: string[] = []
+  const assigned = new Set<string>()
+
+  highlights.forEach((highlight) => {
+    if (assigned.has(highlight)) return
+
+    const areaGroup = getVisitAreaGroup(highlight)
+    const cluster = areaGroup
+      ? highlights.filter((candidate) => !assigned.has(candidate) && getVisitAreaGroup(candidate) === areaGroup)
+      : [highlight]
+
+    cluster.forEach((candidate) => {
+      if (assigned.has(candidate)) return
+      assigned.add(candidate)
+      grouped.push(candidate)
+    })
+  })
+
+  return grouped
 }
 
 function getVisitTransferMinutesBetween(highlightA: string, highlightB: string) {
@@ -1081,6 +1132,47 @@ function getVisitTransferMinutesBetween(highlightA: string, highlightB: string) 
   return 25
 }
 
+function getCompanionCandidateScore(primary: string, candidate: string) {
+  const transferMinutes = getVisitTransferMinutesBetween(primary, candidate)
+  const primaryDuration = getVisitDurationMinutes(primary)
+  const candidateDuration = getVisitDurationMinutes(candidate)
+  const combinedDuration = primaryDuration + candidateDuration + transferMinutes
+  const sameAreaBonus = getVisitAreaGroup(primary) && getVisitAreaGroup(primary) === getVisitAreaGroup(candidate) ? -10 : 0
+
+  return {
+    transferMinutes,
+    combinedDuration,
+    score: transferMinutes + candidateDuration / 12 + combinedDuration / 30 + sameAreaBonus
+  }
+}
+
+function getBestCompanionHighlight(highlights: string[], primaryIndex: number) {
+  const primary = highlights[primaryIndex]
+  if (!primary) return null
+
+  let bestCandidate: string | null = null
+  let bestScore = Number.POSITIVE_INFINITY
+
+  for (let index = primaryIndex + 1; index < highlights.length; index += 1) {
+    const candidate = highlights[index]
+    if (!candidate || candidate === primary) continue
+
+    const { transferMinutes, combinedDuration, score } = getCompanionCandidateScore(primary, candidate)
+    if (
+      transferMinutes <= 25 &&
+      combinedDuration <= 180 &&
+      getVisitDurationMinutes(primary) <= 120 &&
+      getVisitDurationMinutes(candidate) <= 90 &&
+      score < bestScore
+    ) {
+      bestCandidate = candidate
+      bestScore = score
+    }
+  }
+
+  return bestCandidate
+}
+
 function getSelectedVisitHighlights(city: string, visitIndex: number) {
   const highlights = getCityVisitPool(city)
   if (!highlights?.length) return []
@@ -1089,23 +1181,10 @@ function getSelectedVisitHighlights(city: string, visitIndex: number) {
   const startIndex = visitIndex
   const primary = highlights[startIndex]
   const selected = [primary]
-  const nextHighlight = highlights[startIndex + 1]
+  const companionHighlight = getBestCompanionHighlight(highlights, startIndex)
 
-  if (nextHighlight && nextHighlight !== primary) {
-    const transferMinutes = getVisitTransferMinutesBetween(primary, nextHighlight)
-    const combinedDuration =
-      getVisitDurationMinutes(primary) +
-      getVisitDurationMinutes(nextHighlight) +
-      transferMinutes
-
-    if (
-      transferMinutes <= 25 &&
-      combinedDuration <= 180 &&
-      getVisitDurationMinutes(primary) <= 120 &&
-      getVisitDurationMinutes(nextHighlight) <= 90
-    ) {
-      selected.push(nextHighlight)
-    }
+  if (companionHighlight && companionHighlight !== primary) {
+    selected.push(companionHighlight)
   }
 
   return selected

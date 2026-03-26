@@ -5,7 +5,7 @@ import Button from 'primevue/button'
 import Message from 'primevue/message'
 import { appUiContextKey } from '../context'
 import { getTripById, type Trip } from '../../services/api/tripsApi'
-import { convertAmount, isCurrency } from '../../utils/currency'
+import { convertAmount, getCurrencyDisplay, isCurrency } from '../../utils/currency'
 
 const appUi = inject(appUiContextKey)
 if (!appUi) throw new Error('App UI context is not available')
@@ -34,7 +34,8 @@ function convertTripAmount(value: number, currentTrip: Trip) {
 function formatMoney(value: number) {
   return new Intl.NumberFormat(locale.value === 'fr' ? 'fr-FR' : locale.value === 'zh' ? 'zh-CN' : 'en-US', {
     style: 'currency',
-    currency: currencyCode.value
+    currency: currencyCode.value,
+    currencyDisplay: getCurrencyDisplay(currencyCode.value)
   }).format(value)
 }
 

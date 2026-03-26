@@ -20,7 +20,7 @@ import {
 } from '../locales/i18n'
 import { deleteTrip, getTrips, type Trip } from '../services/api/tripsApi'
 import { clearAuthSession, getAuthUsername, isAuthenticated } from '../services/api/authSession'
-import { convertAmount, isCurrency } from '../utils/currency'
+import { convertAmount, getCurrencyDisplay, isCurrency } from '../utils/currency'
 
 const language = ref<Language>('en')
 const currency = ref<Currency>('EUR')
@@ -307,7 +307,8 @@ function goToCreateTrip() {
 function formatBudget(value: number) {
   return new Intl.NumberFormat(localeByLanguage[language.value], {
     style: 'currency',
-    currency: currency.value
+    currency: currency.value,
+    currencyDisplay: getCurrencyDisplay(currency.value)
   }).format(value)
 }
 
