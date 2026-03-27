@@ -28,6 +28,7 @@ import {
   getGeneratedVisitDurationMinutes,
   getGeneratedVisitName,
   getGeneratedVisitSiteCount,
+  getGeneratedVisitTimeWindow,
   getGeneratedVisitTransferInfo,
   getPopularEnRouteStop,
   inferCountryForCity,
@@ -1173,61 +1174,128 @@ function getCityCandidates() {
 async function getOrderedRoute(candidates: CityCandidate[]) {
   if (candidates.length <= 1) return candidates
 
+  const distanceCache = new Map<string, number | null>()
+  const getCachedDistance = async (fromCity: string, toCity: string) => {
+    const cacheKey = [fromCity.trim().toLowerCase(), toCity.trim().toLowerCase()].sort().join('|')
+    if (distanceCache.has(cacheKey)) {
+      return distanceCache.get(cacheKey) ?? null
+    }
+
+    const distance = await getDistanceBetweenCities(fromCity, toCity, form.countries, currentLanguage.value)
+    distanceCache.set(cacheKey, distance)
+    return distance
+  }
+
+  const normalizeDistanceScore = (distance: number | null) => distance ?? 1600
+  const startKey = form.routeStartCity.trim().toLowerCase()
+  const endKey = form.routeEndCity.trim().toLowerCase()
+  const isRoundTrip = startKey.length > 0 && startKey === endKey
+
+  const scoreRoute = async (route: CityCandidate[]) => {
+    if (route.length === 0) return Number.POSITIVE_INFINITY
+
+    let totalDistance = 0
+    let countryTransitions = 0
+    let countryReentries = 0
+    let popularityPenalty = 0
+    const departedCountries = new Set<string>()
+
+    for (let index = 0; index < route.length - 1; index += 1) {
+      const current = route[index]
+      const next = route[index + 1]
+      totalDistance += normalizeDistanceScore(await getCachedDistance(current.name, next.name))
+
+      if (current.country !== next.country) {
+        countryTransitions += 1
+        departedCountries.add(current.country)
+        if (departedCountries.has(next.country)) {
+          countryReentries += 1
+        }
+      }
+    }
+
+    const terminalCity =
+      isRoundTrip && route.length > 0
+        ? route[0]
+        : endKey.length > 0 && route[route.length - 1]?.name.toLowerCase() !== endKey
+          ? candidates.find((candidate) => candidate.name.toLowerCase() === endKey) ?? null
+          : null
+
+    if (terminalCity && terminalCity.name !== route[route.length - 1]?.name) {
+      totalDistance += normalizeDistanceScore(await getCachedDistance(route[route.length - 1].name, terminalCity.name))
+      if (route[route.length - 1].country !== terminalCity.country) {
+        countryTransitions += 1
+        if (departedCountries.has(terminalCity.country)) {
+          countryReentries += 1
+        }
+      }
+    }
+
+    route.forEach((candidate, index) => {
+      popularityPenalty += Math.max(0, candidate.popularityRank) * 2
+      if (candidate.preferredStay) {
+        popularityPenalty -= Math.max(0, 40 - index * 6)
+      }
+    })
+
+    return totalDistance + countryTransitions * 20 + countryReentries * 180 + popularityPenalty
+  }
+
   const remaining = [...candidates].sort((left, right) => {
     if (left.preferredStay !== right.preferredStay) return left.preferredStay ? -1 : 1
     if (left.popularityRank !== right.popularityRank) return left.popularityRank - right.popularityRank
     if (left.countryOrder !== right.countryOrder) return left.countryOrder - right.countryOrder
     return left.name.localeCompare(right.name)
   })
-  const startKey = form.routeStartCity.trim().toLowerCase()
-  const endKey = form.routeEndCity.trim().toLowerCase()
   const startIndex = startKey ? remaining.findIndex((candidate) => candidate.name.toLowerCase() === startKey) : -1
   const startCandidate = startIndex >= 0 ? remaining.splice(startIndex, 1)[0] : (remaining.shift() as CityCandidate)
   const shortRoundTrip = dayCountForRouteFilter() <= 3 && startKey.length > 0 && startKey === endKey
-  const filteredRemaining = shortRoundTrip
+  const routedCandidates = shortRoundTrip
     ? await filterCandidatesForShortRoundTrip(startCandidate, remaining)
     : remaining
-  const route: CityCandidate[] = [startCandidate]
   const endCandidate =
     endKey && endKey !== startCandidate.name.toLowerCase()
-      ? filteredRemaining.find((candidate) => candidate.name.toLowerCase() === endKey) ?? null
+      ? routedCandidates.find((candidate) => candidate.name.toLowerCase() === endKey) ?? null
       : null
+  const filteredRemaining = routedCandidates.filter(
+    (candidate) => !endCandidate || candidate.name.toLowerCase() !== endCandidate.name.toLowerCase()
+  )
+  const route: CityCandidate[] = [startCandidate]
 
   while (filteredRemaining.length > 0) {
-    if (
-      endCandidate &&
-      filteredRemaining.length === 1 &&
-      filteredRemaining[0].name.toLowerCase() === endCandidate.name.toLowerCase()
-    ) {
-      route.push(filteredRemaining.shift() as CityCandidate)
-      break
-    }
-
     const current = route[route.length - 1]
     const scored = await Promise.all(
-      filteredRemaining
-        .filter(
-          (candidate) =>
-            !endCandidate ||
-            candidate.name.toLowerCase() !== endCandidate.name.toLowerCase() ||
-            filteredRemaining.length === 1
-        )
-        .map(async (candidate) => {
-        const distance = await getDistanceBetweenCities(current.name, candidate.name, form.countries, currentLanguage.value)
+      filteredRemaining.map(async (candidate) => {
+        const distance = await getCachedDistance(current.name, candidate.name)
+        const terminalDistance = endCandidate
+          ? await getCachedDistance(candidate.name, endCandidate.name)
+          : isRoundTrip
+            ? await getCachedDistance(candidate.name, startCandidate.name)
+            : null
+        const countryReentryPenalty =
+          route.some((stop, index) => index < route.length - 1 && stop.country === candidate.country) &&
+          route[route.length - 1]?.country !== candidate.country
+            ? 180
+            : 0
+        const candidateScore =
+          normalizeDistanceScore(distance) +
+          normalizeDistanceScore(terminalDistance) * 0.2 +
+          countryReentryPenalty +
+          candidate.countryOrder * 8 +
+          Math.max(0, candidate.popularityRank) * 3 -
+          (candidate.preferredStay ? 90 : 0)
 
-          return {
-            candidate,
-            distance
-          }
-        })
+        return {
+          candidate,
+          distance,
+          candidateScore
+        }
+      })
     )
 
     scored.sort((left, right) => {
-      if (left.candidate.popularityRank !== right.candidate.popularityRank) {
-        return left.candidate.popularityRank - right.candidate.popularityRank
-      }
-      if (left.candidate.countryOrder !== right.candidate.countryOrder) {
-        return left.candidate.countryOrder - right.candidate.countryOrder
+      if (left.candidateScore !== right.candidateScore) {
+        return left.candidateScore - right.candidateScore
       }
       if ((left.distance ?? Number.MAX_SAFE_INTEGER) !== (right.distance ?? Number.MAX_SAFE_INTEGER)) {
         return (left.distance ?? Number.MAX_SAFE_INTEGER) - (right.distance ?? Number.MAX_SAFE_INTEGER)
@@ -1243,7 +1311,107 @@ async function getOrderedRoute(candidates: CityCandidate[]) {
     if (nextIndex >= 0) filteredRemaining.splice(nextIndex, 1)
   }
 
-  return route
+  if (endCandidate) {
+    route.push(endCandidate)
+  }
+
+  let bestRoute = [...route]
+  let bestScore = await scoreRoute(bestRoute)
+  const fixedEndOffset = endCandidate ? 1 : 0
+  let improved = true
+
+  while (improved) {
+    improved = false
+
+    for (let start = 1; start < bestRoute.length - fixedEndOffset - 1; start += 1) {
+      for (let end = start + 1; end < bestRoute.length - fixedEndOffset; end += 1) {
+        const candidateRoute = [
+          ...bestRoute.slice(0, start),
+          ...bestRoute.slice(start, end + 1).reverse(),
+          ...bestRoute.slice(end + 1)
+        ]
+        const candidateScore = await scoreRoute(candidateRoute)
+
+        if (candidateScore + 1 < bestScore) {
+          bestRoute = candidateRoute
+          bestScore = candidateScore
+          improved = true
+        }
+      }
+    }
+  }
+
+  return bestRoute
+}
+
+function trimOrderedRouteForDayCount(orderedRoute: CityCandidate[], dayCount: number) {
+  if (orderedRoute.length <= dayCount) return orderedRoute
+
+  const startKey = form.routeStartCity.trim().toLowerCase()
+  const endKey = form.routeEndCity.trim().toLowerCase()
+  const preferredStayKeys = new Set(
+    form.stayPreferences
+      .map((preference) => preference.city.trim().toLowerCase())
+      .filter((city) => city.length > 0)
+  )
+
+  const targetCount = Math.max(form.countries.length, dayCount)
+  const selectedKeys = new Set<string>()
+
+  const trySelect = (candidate: CityCandidate | undefined | null) => {
+    if (!candidate) return
+    selectedKeys.add(candidate.name.toLowerCase())
+  }
+
+  if (startKey) {
+    trySelect(orderedRoute.find((candidate) => candidate.name.toLowerCase() === startKey))
+  }
+
+  form.countries.forEach((country) => {
+    const bestCountryCandidate = orderedRoute
+      .filter((candidate) => candidate.country === country)
+      .sort((left, right) => {
+        if (left.preferredStay !== right.preferredStay) return left.preferredStay ? -1 : 1
+        if (isTouristHub(left.name) !== isTouristHub(right.name)) return isTouristHub(left.name) ? -1 : 1
+        if (left.popularityRank !== right.popularityRank) return left.popularityRank - right.popularityRank
+        return left.name.localeCompare(right.name)
+      })[0]
+
+    trySelect(bestCountryCandidate)
+  })
+
+  orderedRoute.forEach((candidate) => {
+    if (preferredStayKeys.has(candidate.name.toLowerCase())) {
+      trySelect(candidate)
+    }
+  })
+
+  if (endKey) {
+    trySelect(orderedRoute.find((candidate) => candidate.name.toLowerCase() === endKey))
+  }
+
+  const flexibleCandidates = orderedRoute
+    .filter((candidate) => !selectedKeys.has(candidate.name.toLowerCase()))
+    .sort((left, right) => {
+      const leftScore =
+        (left.preferredStay ? 1000 : 0) +
+        (isTouristHub(left.name) ? 100 : 0) +
+        Math.max(0, 30 - left.popularityRank)
+      const rightScore =
+        (right.preferredStay ? 1000 : 0) +
+        (isTouristHub(right.name) ? 100 : 0) +
+        Math.max(0, 30 - right.popularityRank)
+
+      if (leftScore !== rightScore) return rightScore - leftScore
+      return left.name.localeCompare(right.name)
+    })
+
+  for (const candidate of flexibleCandidates) {
+    if (selectedKeys.size >= targetCount) break
+    selectedKeys.add(candidate.name.toLowerCase())
+  }
+
+  return orderedRoute.filter((candidate) => selectedKeys.has(candidate.name.toLowerCase()))
 }
 
 function dayCountForRouteFilter() {
@@ -1305,7 +1473,10 @@ function getAllowedTransportModeForDistance(distance: number | null): TransportM
 
 function canGroupCitiesInSameDay(distance: number | null, transportMode: TransportMode) {
   if (distance === null) return false
-  return transportMode === 'walk' || transportMode === 'local' || transportMode === 'train'
+  if (transportMode === 'walk') return distance <= 25
+  if (transportMode === 'local') return distance <= 80
+  if (transportMode === 'train') return distance <= 140
+  return false
 }
 
 function getPreferredStayDaysByCity() {
@@ -1451,7 +1622,7 @@ async function buildAutoFilledCityStops(orderedRoute: CityCandidate[], dayCount:
     if (routeIndex < orderedRoute.length - 1 && dayCities.length === 1) {
       const remainingDays = dayCount - dayIndex - 1
       const remainingCities = orderedRoute.length - routeIndex - 1
-      if (remainingCities <= remainingDays && isTouristHub(currentCity)) {
+      if (remainingCities <= remainingDays) {
         continue
       }
 
@@ -1757,6 +1928,30 @@ function formatVisitName(city: string, visitIndex: number) {
   return `${name} (${transportLabel} ${transfer.durationMinutes} min)`
 }
 
+function resolveVisitStartMinutes(
+  city: string,
+  visitIndex: number,
+  candidateStartMinutes: number,
+  latestAllowedStartMinutes: number
+) {
+  const visitTimeWindow = getGeneratedVisitTimeWindow(city, visitIndex)
+  const preferredStartMinutes =
+    visitTimeWindow.preferredStartMinutes !== null && visitTimeWindow.preferredStartMinutes <= latestAllowedStartMinutes
+      ? visitTimeWindow.preferredStartMinutes
+      : null
+  const startMinutes = Math.max(
+    candidateStartMinutes,
+    visitTimeWindow.earliestStartMinutes,
+    preferredStartMinutes ?? candidateStartMinutes
+  )
+
+  if (startMinutes > Math.min(latestAllowedStartMinutes, visitTimeWindow.latestStartMinutes)) {
+    return null
+  }
+
+  return startMinutes
+}
+
 function getTransportDurationMinutes(mode: TransportMode, distance: number | null) {
   if (distance === null) {
     if (mode === 'walk') return 25
@@ -1941,14 +2136,20 @@ async function buildAutoActivities(dayStops: string[][]) {
       const visitDurationMinutes = getGeneratedVisitDurationMinutes(city, visitIndex)
       const afternoonStartMinutes = Math.max(currentMinutes, timeToMinutes('15:00'))
       const latestAfternoonStartMinutes = dinnerWindowStartMinutes - visitDurationMinutes - 30
+      const resolvedVisitStartMinutes = resolveVisitStartMinutes(
+        city,
+        visitIndex,
+        afternoonStartMinutes,
+        latestAfternoonStartMinutes
+      )
 
-      if (afternoonStartMinutes > latestAfternoonStartMinutes) {
+      if (resolvedVisitStartMinutes === null) {
         return
       }
 
       currentMinutes = addGeneratedActivity(
         activities,
-        afternoonStartMinutes,
+        resolvedVisitStartMinutes,
         visitDurationMinutes,
         'visit',
         formatVisitName(city, visitIndex)
@@ -1980,12 +2181,18 @@ async function buildAutoActivities(dayStops: string[][]) {
       const visitIndex = visitCountsByCity[city] ?? 0
       const visitDurationMinutes = Math.min(90, getGeneratedVisitDurationMinutes(city, visitIndex))
       const extraVisitStartMinutes = Math.max(currentMinutes, timeToMinutes('15:30'))
+      const resolvedVisitStartMinutes = resolveVisitStartMinutes(
+        city,
+        visitIndex,
+        extraVisitStartMinutes,
+        latestStartMinutes
+      )
 
-      if (extraVisitStartMinutes >= latestStartMinutes) return
+      if (resolvedVisitStartMinutes === null) return
 
       currentMinutes = addGeneratedActivity(
         activities,
-        extraVisitStartMinutes,
+        resolvedVisitStartMinutes,
         visitDurationMinutes,
         'visit',
         formatVisitName(city, visitIndex)
@@ -2040,32 +2247,42 @@ async function buildAutoActivities(dayStops: string[][]) {
         currentMinutes < timeToMinutes(LATEST_AUTO_ACTIVITY_START_TIME)
       ) {
         const visitIndex = visitCountsByCity[city] ?? 0
-        currentMinutes = addGeneratedActivity(
-          activities,
+        const visitDurationMinutes = getGeneratedVisitDurationMinutes(city, visitIndex)
+        const visitStartMinutes = resolveVisitStartMinutes(
+          city,
+          visitIndex,
           currentMinutes,
-          getGeneratedVisitDurationMinutes(city, visitIndex),
-          'visit',
-          formatVisitName(city, visitIndex)
+          timeToMinutes(LATEST_AUTO_ACTIVITY_START_TIME)
         )
-        activities[activities.length - 1].cost = getGeneratedVisitCost(
-          city,
-          visitIndex,
-          itineraryDays.value[dayIndex]?.isoDate,
-          getOccupancyInputs(),
-          props.currencyCode
-        )
-        activities[activities.length - 1].costDetails = getGeneratedVisitCostDetails(
-          city,
-          visitIndex,
-          itineraryDays.value[dayIndex]?.isoDate,
-          formatMoney,
-          getOccupancyInputs(),
-          props.currencyCode
-        )
-        activities[activities.length - 1].estimatedCost = true
-        visitCountsByCity[city] = visitIndex + getGeneratedVisitSiteCount(city, visitIndex)
 
-        currentMinutes += 30
+        if (visitStartMinutes !== null) {
+          currentMinutes = addGeneratedActivity(
+            activities,
+            visitStartMinutes,
+            visitDurationMinutes,
+            'visit',
+            formatVisitName(city, visitIndex)
+          )
+          activities[activities.length - 1].cost = getGeneratedVisitCost(
+            city,
+            visitIndex,
+            itineraryDays.value[dayIndex]?.isoDate,
+            getOccupancyInputs(),
+            props.currencyCode
+          )
+          activities[activities.length - 1].costDetails = getGeneratedVisitCostDetails(
+            city,
+            visitIndex,
+            itineraryDays.value[dayIndex]?.isoDate,
+            formatMoney,
+            getOccupancyInputs(),
+            props.currencyCode
+          )
+          activities[activities.length - 1].estimatedCost = true
+          visitCountsByCity[city] = visitIndex + getGeneratedVisitSiteCount(city, visitIndex)
+
+          currentMinutes += 30
+        }
       }
 
       maybeAddPendingMeals(city)
@@ -2213,7 +2430,8 @@ async function buildAutoActivities(dayStops: string[][]) {
 
         const shouldApplyArrivalTimeZone = transportMode === 'flight' && Boolean(itineraryDays.value[dayIndex])
         const fullTransportDurationMinutes = Math.max(0, transportEndMinutes - transportStartMinutes)
-        let displayedEndTime = minutesToTime(Math.min(Math.max(transportStartMinutes, transportEndMinutes), dayEndMinutes))
+        let displayedEndTime = minutesToTime(Math.max(transportStartMinutes, transportEndMinutes))
+        endDayOffset = Math.max(endDayOffset, Math.floor(Math.max(transportStartMinutes, transportEndMinutes) / (24 * 60)))
 
         if (shouldApplyArrivalTimeZone && itineraryDays.value[dayIndex]) {
           const arrivalInfo = await getArrivalTimeInfo(
@@ -2281,30 +2499,39 @@ async function buildAutoActivities(dayStops: string[][]) {
     const shouldAddExtraVisit = cities.length === 1 || isTouristHub(finalCity)
     if (shouldAddExtraVisit && activities.length < 5 && currentMinutes < timeToMinutes(LATEST_AUTO_ACTIVITY_START_TIME)) {
       const visitIndex = visitCountsByCity[finalCity] ?? 0
-      addGeneratedActivity(
-        activities,
+      const visitStartMinutes = resolveVisitStartMinutes(
+        finalCity,
+        visitIndex,
         Math.max(currentMinutes, timeToMinutes('15:30')),
-        getGeneratedVisitDurationMinutes(finalCity, visitIndex),
-        'visit',
-        formatVisitName(finalCity, visitIndex)
+        timeToMinutes(LATEST_AUTO_ACTIVITY_START_TIME)
       )
-      activities[activities.length - 1].cost = getGeneratedVisitCost(
-        finalCity,
-        visitIndex,
-        itineraryDays.value[dayIndex]?.isoDate,
-        getOccupancyInputs(),
-        props.currencyCode
-      )
-      activities[activities.length - 1].costDetails = getGeneratedVisitCostDetails(
-        finalCity,
-        visitIndex,
-        itineraryDays.value[dayIndex]?.isoDate,
-        formatMoney,
-        getOccupancyInputs(),
-        props.currencyCode
-      )
-      activities[activities.length - 1].estimatedCost = true
-      visitCountsByCity[finalCity] = visitIndex + getGeneratedVisitSiteCount(finalCity, visitIndex)
+
+      if (visitStartMinutes !== null) {
+        addGeneratedActivity(
+          activities,
+          visitStartMinutes,
+          getGeneratedVisitDurationMinutes(finalCity, visitIndex),
+          'visit',
+          formatVisitName(finalCity, visitIndex)
+        )
+        activities[activities.length - 1].cost = getGeneratedVisitCost(
+          finalCity,
+          visitIndex,
+          itineraryDays.value[dayIndex]?.isoDate,
+          getOccupancyInputs(),
+          props.currencyCode
+        )
+        activities[activities.length - 1].costDetails = getGeneratedVisitCostDetails(
+          finalCity,
+          visitIndex,
+          itineraryDays.value[dayIndex]?.isoDate,
+          formatMoney,
+          getOccupancyInputs(),
+          props.currencyCode
+        )
+        activities[activities.length - 1].estimatedCost = true
+        visitCountsByCity[finalCity] = visitIndex + getGeneratedVisitSiteCount(finalCity, visitIndex)
+      }
     }
 
     dayPlans.push({
@@ -2400,7 +2627,8 @@ async function autoFillCities() {
     if (candidates.length === 0) return
 
     const orderedRoute = await getOrderedRoute(candidates)
-    const rawCityStops = await buildAutoFilledCityStops(orderedRoute, dayCount)
+    const trimmedRoute = trimOrderedRouteForDayCount(orderedRoute, dayCount)
+    const rawCityStops = await buildAutoFilledCityStops(trimmedRoute, dayCount)
     const plannedCityStops = applySelectedRouteEndpoints(insertPopularEnRouteStops(rawCityStops))
     const draftDayPlans = await buildAutoActivities(plannedCityStops)
     const normalizedCityStops = normalizeGeneratedCityStops(draftDayPlans, plannedCityStops)

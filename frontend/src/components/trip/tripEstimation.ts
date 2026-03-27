@@ -43,11 +43,20 @@ interface TrainFareProfile {
 interface VisitSiteMetadata {
   durationMinutes?: number
   areaGroup?: string
+  openingMinutes?: number
+  closingMinutes?: number
+  preferredStartMinutes?: number
 }
 
 interface VisitTransferInfo {
   mode: 'walk' | 'local' | 'drive'
   durationMinutes: number
+}
+
+interface VisitTimeWindow {
+  earliestStartMinutes: number
+  latestStartMinutes: number
+  preferredStartMinutes: number | null
 }
 
 interface EnRouteStopSuggestion {
@@ -498,11 +507,12 @@ const attractionPriceByName: Record<string, number> = {
   'Shamian Island': 0,
   'Chen Clan Ancestral Hall': 2,
   'Yuexiu Park': 0,
-  'Eiffel Tower': 29,
+  'Eiffel Tower': 36.7,
   'Louvre Museum': 22,
   'Notre-Dame Cathedral': 0,
   Montmartre: 0,
-  'Palace of Versailles': 21,
+  'Arc de Triomphe': 16,
+  'Palace of Versailles': 25,
   'Gardens of Versailles': 10,
   'Claude Monet House': 11,
   'Disneyland Paris': 65,
@@ -567,7 +577,7 @@ const attractionPriceByName: Record<string, number> = {
   "Arthur's Seat": 0,
   'Palace of Holyroodhouse': 25,
   Colosseum: 18,
-  'Vatican Museums': 25,
+  'Vatican Museums': 20,
   'Trevi Fountain': 0,
   Pantheon: 5,
   'Duomo di Milano': 10,
@@ -646,6 +656,71 @@ const attractionPriceByName: Record<string, number> = {
   'Fremantle Markets': 0,
   'Cottesloe Beach': 0,
   'Elizabeth Quay': 0
+}
+
+interface ReviewedAttractionPricingRule {
+  source: string
+  getPrice: (isoDate?: string) => number
+  seasonLabel?: (isoDate?: string) => string | null
+}
+
+const reviewedAttractionPricingByName: Record<string, ReviewedAttractionPricingRule> = {
+  'Eiffel Tower': {
+    source: 'https://www.toureiffel.paris/en/teachers',
+    getPrice: () => 36.7,
+    seasonLabel: () => null
+  },
+  'Louvre Museum': {
+    source: 'https://www.louvre.fr/en',
+    getPrice: () => 22,
+    seasonLabel: () => null
+  },
+  'Arc de Triomphe': {
+    source: 'https://www.monuments-nationaux.fr/es/grupos-y-profesionales-del-turismo/qu-est-ce-que-la-billetterie-a-l-avance/rates-2026',
+    getPrice: (isoDate) => {
+      if (!isoDate) return 16
+      const month = new Date(`${isoDate}T12:00:00`).getMonth() + 1
+      return month >= 4 && month <= 9 ? 22 : 16
+    },
+    seasonLabel: (isoDate) => {
+      if (!isoDate) return 'CMN low season default'
+      const month = new Date(`${isoDate}T12:00:00`).getMonth() + 1
+      return month >= 4 && month <= 9 ? 'CMN high season' : 'CMN low season'
+    }
+  },
+  'Palace of Versailles': {
+    source: 'https://en.chateauversailles.fr/plan-your-visit',
+    getPrice: () => 25,
+    seasonLabel: () => null
+  },
+  Colosseum: {
+    source: 'https://colosseo.it/en/tickets/24h-only-arena/',
+    getPrice: () => 18,
+    seasonLabel: () => null
+  },
+  'Vatican Museums': {
+    source: 'https://www.museivaticani.va/content/museivaticani/it/organizza-visita/tariffe-e-biglietti.html',
+    getPrice: () => 20,
+    seasonLabel: () => null
+  },
+  'Park Guell': {
+    source: 'https://parkguell.barcelona/es/planifica-la-visita/tarifas-y-horarios',
+    getPrice: () => 18,
+    seasonLabel: () => null
+  }
+}
+
+function getLiveReviewedAttractionPrice(highlight: string, isoDate?: string) {
+  const pricingRule = reviewedAttractionPricingByName[highlight]
+  return pricingRule ? pricingRule.getPrice(isoDate) : null
+}
+
+function getLiveReviewedAttractionSource(highlight: string) {
+  return reviewedAttractionPricingByName[highlight]?.source ?? null
+}
+
+function getLiveReviewedAttractionSeasonLabel(highlight: string, isoDate?: string) {
+  return reviewedAttractionPricingByName[highlight]?.seasonLabel?.(isoDate) ?? null
 }
 
 const visitSiteMetadataByName: Record<string, VisitSiteMetadata> = {
@@ -1226,6 +1301,68 @@ export function getGeneratedVisitDurationMinutes(city: string, visitIndex: numbe
   return Math.max(60, Math.min(240, totalDuration + transferBuffer))
 }
 
+function inferVisitSiteTimeWindow(highlight: string) {
+  const metadata = visitSiteMetadataByName[highlight]
+  if (metadata?.openingMinutes !== undefined || metadata?.closingMinutes !== undefined || metadata?.preferredStartMinutes !== undefined) {
+    return {
+      openingMinutes: metadata?.openingMinutes ?? 9 * 60,
+      closingMinutes: metadata?.closingMinutes ?? 18 * 60,
+      preferredStartMinutes: metadata?.preferredStartMinutes ?? null
+    }
+  }
+
+  const normalized = highlight.toLowerCase()
+
+  if (/(market)/.test(normalized)) {
+    return { openingMinutes: 9 * 60, closingMinutes: 16 * 60, preferredStartMinutes: 10 * 60 }
+  }
+
+  if (/(tower|observatory|skytree|top of the rock|bridge climb)/.test(normalized)) {
+    return { openingMinutes: 10 * 60, closingMinutes: 22 * 60, preferredStartMinutes: 18 * 60 }
+  }
+
+  if (/(museum|gallery|palace|castle|cathedral|basilica|church|chapel|temple|abbey|duomo|alcazar|mosque)/.test(normalized)) {
+    return { openingMinutes: 9 * 60, closingMinutes: 18 * 60, preferredStartMinutes: null }
+  }
+
+  if (
+    /(park|garden|bridge|square|quarter|mile|port|harbour|harbor|promenade|beach|canal|old town|old nice|old port|riverwalk|riverfront|crossing|island|street|vieux|plaza|plaza|rambla|hill)/.test(
+      normalized
+    )
+  ) {
+    return { openingMinutes: 8 * 60, closingMinutes: 20 * 60, preferredStartMinutes: null }
+  }
+
+  return { openingMinutes: 9 * 60, closingMinutes: 19 * 60, preferredStartMinutes: null }
+}
+
+export function getGeneratedVisitTimeWindow(city: string, visitIndex: number): VisitTimeWindow {
+  const selected = getSelectedVisitHighlights(city, visitIndex)
+  const durationMinutes = getGeneratedVisitDurationMinutes(city, visitIndex)
+
+  if (selected.length === 0) {
+    return {
+      earliestStartMinutes: 9 * 60,
+      latestStartMinutes: Math.max(9 * 60, 19 * 60 - durationMinutes),
+      preferredStartMinutes: null
+    }
+  }
+
+  const windows = selected.map((highlight) => inferVisitSiteTimeWindow(highlight))
+  const earliestStartMinutes = windows.reduce((max, window) => Math.max(max, window.openingMinutes), 0)
+  const latestClosingMinutes = windows.reduce((min, window) => Math.min(min, window.closingMinutes), 24 * 60)
+  const preferredStartMinutes = windows.reduce<number | null>((latest, window) => {
+    if (window.preferredStartMinutes === null) return latest
+    return latest === null ? window.preferredStartMinutes : Math.max(latest, window.preferredStartMinutes)
+  }, null)
+
+  return {
+    earliestStartMinutes,
+    latestStartMinutes: Math.max(earliestStartMinutes, latestClosingMinutes - durationMinutes),
+    preferredStartMinutes
+  }
+}
+
 export function getGeneratedVisitCost(
   city: string,
   visitIndex: number,
@@ -1234,23 +1371,18 @@ export function getGeneratedVisitCost(
   currency: Currency = 'EUR'
 ) {
   const selected = getSelectedVisitHighlights(city, visitIndex)
-  const seasonMultiplier = getSeasonMultiplier(travelDate)
   const partyUnits = getVisitPartyUnits(occupancy)
 
   if (selected.length === 0) {
-    return convertAmount(Math.round(18 * seasonMultiplier * partyUnits * 100) / 100, 'EUR', currency)
+    return convertAmount(Math.round(18 * partyUnits * 100) / 100, 'EUR', currency)
   }
 
-  const knownPrices = selected
-    .map((highlight) => attractionPriceByName[highlight])
-    .filter((price): price is number => typeof price === 'number')
-
-  if (knownPrices.length === 0) {
-    return convertAmount(Math.round(18 * seasonMultiplier * partyUnits * 100) / 100, 'EUR', currency)
-  }
-
-  const totalPrice = knownPrices.reduce((sum, price) => sum + price, 0)
-  return convertAmount(Math.round(totalPrice * seasonMultiplier * partyUnits * 100) / 100, 'EUR', currency)
+  const baseFallbackPrice = 18
+  const totalPrice = selected.reduce((sum, highlight) => {
+    const reviewedPrice = getLiveReviewedAttractionPrice(highlight, travelDate)
+    return sum + (reviewedPrice ?? baseFallbackPrice)
+  }, 0)
+  return convertAmount(Math.round(totalPrice * partyUnits * 100) / 100, 'EUR', currency)
 }
 
 export function getGeneratedVisitCostDetails(
@@ -1262,7 +1394,6 @@ export function getGeneratedVisitCostDetails(
   currency: Currency = 'EUR'
 ) {
   const selected = getSelectedVisitHighlights(city, visitIndex)
-  const seasonMultiplier = getSeasonMultiplier(travelDate)
   const { adults, children } = normalizeOccupancy(occupancy)
   const partyLabel = `${adults} adult${adults === 1 ? '' : 's'}${children > 0 ? `, ${children} child${children === 1 ? '' : 'ren'}` : ''}`
 
@@ -1272,8 +1403,12 @@ export function getGeneratedVisitCostDetails(
 
   const priced = selected
     .map((highlight) => {
-      const price = attractionPriceByName[highlight]
-      return typeof price === 'number' ? `${highlight}: ${formatMoney(convertAmount(price, 'EUR', currency))}` : null
+      const price = getLiveReviewedAttractionPrice(highlight, travelDate)
+      const source = getLiveReviewedAttractionSource(highlight)
+      const seasonLabel = getLiveReviewedAttractionSeasonLabel(highlight, travelDate)
+      return typeof price === 'number'
+        ? `${highlight}: ${formatMoney(convertAmount(price, 'EUR', currency))}${source ? ` (official${seasonLabel ? `, ${seasonLabel}` : ''})` : ''}`
+        : null
     })
     .filter((value): value is string => Boolean(value))
 
@@ -1281,8 +1416,11 @@ export function getGeneratedVisitCostDetails(
     return `Estimated price. Average ticket cost in ${city} for ${partyLabel}`
   }
 
-  const seasonLabel = seasonMultiplier > 1.1 ? 'high season adjusted' : seasonMultiplier < 1 ? 'low season adjusted' : 'standard season'
-  return `Estimated price. ${priced.join(' | ')} (${seasonLabel}, ${partyLabel})`
+  const reviewedCoverage =
+    priced.length === selected.length ? 'officially reviewed current ticket price' : 'mixed official reviewed price + generic estimate'
+  const unreviewedCount = selected.length - priced.length
+  const fallbackNote = unreviewedCount > 0 ? `; ${unreviewedCount} site${unreviewedCount === 1 ? '' : 's'} still using generic estimate` : ''
+  return `Estimated price. ${priced.join(' | ')} (${partyLabel}; ${reviewedCoverage}${fallbackNote})`
 }
 
 function getMealOptionsForCity(city: string, fallbackCountry?: string) {
