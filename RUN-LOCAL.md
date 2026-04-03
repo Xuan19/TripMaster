@@ -5,7 +5,7 @@ This is the default local development setup for TripMaster.
 ## Stack
 
 - Frontend: Vite on `http://localhost:5173`
-- Backend: ASP.NET API on `https://localhost:7024`
+- Backend: ASP.NET API on `http://localhost:5024`
 - Database: SQL Server in Docker on `localhost:1433`
 
 ## 1. Start SQL Server
@@ -36,11 +36,11 @@ npm run dev
 `frontend/.env.local` is already set to:
 
 ```bash
-VITE_API_BASE_URL=https://localhost:7024/api
+VITE_API_BASE_URL=http://localhost:5024/api
 ```
 
 ## Notes
 
-- If the backend certificate triggers browser warnings locally, trust the ASP.NET development certificate on your machine.
-- The frontend will call the backend over HTTPS on port `7024`.
+- The frontend will call the backend over HTTP on port `5024`.
+- If you later want HTTPS again for local development, generate and trust an ASP.NET development certificate with `dotnet dev-certs https --trust` and restore the HTTPS URLs.
 - For cloud deployment, do not reuse `frontend/.env.local`; use environment variables in Vercel/Render instead.

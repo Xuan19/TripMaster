@@ -4,4 +4,4 @@ export const apiBaseUrl = configuredApiBaseUrl && configuredApiBaseUrl.length > 
   ? configuredApiBaseUrl.replace(/\/$/, '')
   : import.meta.env.PROD
     ? '/api'
-    : 'https://localhost:7024/api'
+    : 'http://localhost:5024/api'

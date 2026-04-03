@@ -52,10 +52,10 @@ cp .env.example .env.local
 Set:
 
 ```bash
-VITE_API_BASE_URL=https://localhost:7024/api
+VITE_API_BASE_URL=http://localhost:5024/api
 ```
 
-If the variable is missing, the app falls back to `https://localhost:7024/api`.
+If the variable is missing, the app falls back to `http://localhost:5024/api`.
 
 ## Deployed setup
 
